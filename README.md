@@ -338,3 +338,36 @@ EXPO_PUBLIC_API_URL=https://mktfybjfxzhvpmnepshq.supabase.co
 ---
 
 **Happy coding! 🚀**
+
+
+Fluxul complet simplu:
+1. Lucrezi în dev (dezvoltare zilnică)
+Apply to README.md
+Run
+dev
+Ce se întâmplă automat:
+GitHub Actions detectează push pe dev
+Rulează eas update --branch dev
+→ OTA update pe canalul dev în EAS
+→ Utilizatorii pe canalul dev primesc update-ul instant (fără reinstalare app)
+2. Când ești gata de producție
+Apply to README.md
+Run
+main
+Ce se întâmplă automat:
+GitHub Actions detectează push pe main
+Rulează eas update --branch main → OTA update pe prod
+Rulează eas build → Build nativ nou (apk/ipa)
+→ Utilizatorii pe main primesc OTA update
+→ Build-ul nou ajunge în store (Google Play/App Store)
+Pe scurt:
+dev = OTA update rapid pentru testare
+main = OTA update + build nou pentru producție
+EAS = platforma Expo care gestionează update-urile și build-urile
+GitHub Actions = automatizarea care declanșează totul
+Avantaje:
+Testezi rapid pe dev fără rebuild
+Release-uri sigure pe main cu build complet
+Zero configurare manuală - totul automat
+OTA updates = utilizatorii primesc fix-uri instant
+Deci da, exact cum ai zis: dev → testezi → main → GitHub Actions → EAS → users! 🚀
