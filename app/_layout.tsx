@@ -45,17 +45,30 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === '(auth)';
     const inTabsGroup = segments[0] === '(tabs)';
     const inOnboardingGroup = segments[0] === '(onboarding)';
+    const currentPath = segments.join('/') || 'root';
+
+    console.log('[Layout] Navigation check:', {
+      currentPath,
+      hasSession: !!session,
+      hasCompletedOnboarding,
+      inAuthGroup,
+      inTabsGroup,
+      inOnboardingGroup
+    });
 
     // If user has completed onboarding, allow them to access the main feed (preview mode)
     // Only redirect to login if they're trying to access auth screens while authenticated
     if (session && inAuthGroup) {
       // User is authenticated but on auth screens - redirect to main feed
+      console.log('[Layout] Redirecting authenticated user from auth to main feed');
       router.replace('/');
-    } else if (!session && !hasCompletedOnboarding && !inOnboardingGroup) {
+    } else if (!hasCompletedOnboarding && !inOnboardingGroup) {
       // User hasn't completed onboarding - start onboarding flow
+      console.log('[Layout] Redirecting new user to onboarding');
       router.replace('/(onboarding)/intro');
     } else if (!session && hasCompletedOnboarding && inAuthGroup) {
       // User completed onboarding but is on auth screen - redirect to main feed (preview mode)
+      console.log('[Layout] Redirecting user from auth to main feed (preview mode)');
       router.replace('/');
     }
     
@@ -125,7 +138,6 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="car/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="debug-oauth" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="light" />
