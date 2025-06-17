@@ -1,14 +1,15 @@
 # Autovad - Car Marketplace Mobile App
 
-rrrr
+🎉 **LATEST UPDATE: Google SignIn is now FULLY FUNCTIONAL!** 🎉
+
 A modern mobile application for buying and selling cars, built with React Native and Expo.
 
 ## Features
 
-- 🔐 Authentication
-  - Email/Password login
-  - Google OAuth integration
-  - Secure session management
+- 🔐 **Authentication** ✅ **WORKING**
+  - Email/Password login ✅
+  - **Google OAuth integration** ✅ **FULLY FUNCTIONAL**
+  - Secure session management ✅
 - 🚗 Car Listings
   - Browse car listings
   - Detailed car information
@@ -117,12 +118,22 @@ yarn start
 - iOS: Press `i` in the terminal or click "Run on iOS simulator" in Expo Dev Tools
 - Android: Press `a` in the terminal or click "Run on Android device/emulator" in Expo Dev Tools
 
-## Google Login Usage
+## 🎉 Google Login Usage - **FULLY WORKING!**
+
+✅ **CONFIRMED WORKING** - Google OAuth authentication is now 100% functional!
 
 - On the login and register screens, you can sign in or register with Google by pressing the "Sign in with Google" button.
-- The app uses a custom URL scheme (`autovad://`) for handling the OAuth redirect.
-- Make sure your Google OAuth credentials are set up in both Google Cloud Console and Supabase.
-- The app will handle the OAuth flow and automatically create or log in the user.
+- The app uses a **fixed URL scheme** (`exp://localhost/--/auth/callback`) for reliable OAuth redirects.
+- **Supabase Dashboard Configuration Required:**
+  - Add `exp://localhost/--/auth/callback` to Redirect URLs
+  - Add `autovad://auth/callback` for production builds
+- **Google Cloud Console Setup:**
+  - Add your Supabase callback URL: `https://[project-id].supabase.co/auth/v1/callback`
+- The app handles the complete OAuth flow and automatically creates/logs in users.
+
+### 🔧 **Debug & Setup Guide:**
+- See `SETUP-GOOGLE-AUTH.md` for detailed configuration steps
+- Use the built-in debug page (`/debug-oauth`) during development to verify URLs
 
 ## Security Best Practices
 
