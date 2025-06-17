@@ -94,13 +94,16 @@ export default function RegisterScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    console.log('[GoogleSignIn] Button pressed');
     setLoading(true);
     try {
       const { error } = await signInWithGoogle();
+      console.log('[GoogleSignIn] signInWithGoogle result:', error);
       if (error) {
         Alert.alert(t('auth.registrationFailed'), error instanceof Error ? error.message : 'An error occurred');
       }
     } catch (error) {
+      console.log('[GoogleSignIn] Exception:', error);
       Alert.alert('Eroare', 'A apărut o eroare neașteptată');
     } finally {
       setLoading(false);

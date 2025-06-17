@@ -1,0 +1,49 @@
+name: EAS Dev/Prod OTA & Build
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+jobs:
+  ota-update-dev:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: EAS OTA Update (dev)
+        run: eas update --branch dev --non-interactive --message "OTA update (dev): ${{ github.sha }}"
+
+  ota-update-main:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: EAS OTA Update (main)
+        run: eas update --branch main --non-interactive --message "OTA update (main): ${{ github.sha }}"
+      - name: EAS Build (Android)
+        run: eas build --platform android --non-interactive --profile production
+      - name: EAS Build (iOS)
+        run: eas build --platform ios --non-interactive --profile production
+
+  promote-dev-to-main:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Promote dev to main
+        run: eas update:promote --from-branch dev --to-branch main --non-interactive --message "Promote dev to main: ${{ github.sha }}" 

@@ -1,5 +1,6 @@
 # Autovad - Car Marketplace Mobile App
 
+rrrr
 A modern mobile application for buying and selling cars, built with React Native and Expo.
 
 ## Features
@@ -43,6 +44,8 @@ A modern mobile application for buying and selling cars, built with React Native
 - npm or yarn
 - Expo CLI
 - iOS Simulator (for Mac) or Android Emulator
+- Google Cloud Console account
+- Supabase account
 
 ### Installation
 
@@ -66,24 +69,43 @@ Create a `.env` file in the root directory with the following variables:
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# Google OAuth Configuration (if needed)
+# Google OAuth Configuration
 EXPO_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
 ```
 
-You can also configure these values in `app.json` under the `extra` section:
-```json
-{
-  "expo": {
-    "extra": {
-      "supabaseUrl": "your_supabase_project_url",
-      "supabaseAnonKey": "your_supabase_anon_key",
-      "googleClientId": "your_google_client_id"
-    }
-  }
-}
-```
+4. Configure Google OAuth:
 
-4. Start the development server:
+a. Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the Google Sign-In API
+   - Create OAuth 2.0 credentials
+   - Add the following Authorised JavaScript origins:
+     ```
+     https://mktfybjfxzhvpmnepshq.supabase.co
+     exp://192.168.0.197:8082
+     exp://localhost:8082
+     ```
+   - Add the following Authorised redirect URIs:
+     ```
+     autovad://auth/callback
+     https://mktfybjfxzhvpmnepshq.supabase.co/auth/v1/callback
+     exp://192.168.0.197:8082/--/(auth)
+     exp://localhost:8082/--/(auth)
+     ```
+
+b. Configure Supabase:
+   - Go to Authentication → URL Configuration
+   - Set Site URL to: `https://mktfybjfxzhvpmnepshq.supabase.co`
+   - Add the following Redirect URLs:
+     ```
+     autovad://auth/callback
+     exp://192.168.0.197:8082/--/(auth)
+     exp://localhost:8082/--/(auth)
+     ```
+   - Make sure "Enable OAuth providers" is turned on for Google
+   - Add your Google Client ID and Secret from Google Cloud Console
+
+5. Start the development server:
 ```bash
 npm start
 # or
@@ -98,7 +120,8 @@ yarn start
 ## Google Login Usage
 
 - On the login and register screens, you can sign in or register with Google by pressing the "Sign in with Google" button.
-- Make sure your Google OAuth credentials are set up in Supabase and your `.env` or `app.json` as described above.
+- The app uses a custom URL scheme (`autovad://`) for handling the OAuth redirect.
+- Make sure your Google OAuth credentials are set up in both Google Cloud Console and Supabase.
 - The app will handle the OAuth flow and automatically create or log in the user.
 
 ## Security Best Practices
@@ -112,7 +135,9 @@ yarn start
 
 - **Google Login not working?**
   - Double-check your Google OAuth setup in Supabase and Google Cloud Console.
-  - Make sure your redirect URIs are correct.
+  - Make sure your redirect URIs are correct:
+    - Google Cloud Console: `https://your-project.supabase.co/auth/v1/callback`
+    - Supabase: `autovad://auth/callback`
   - Ensure your credentials are present in `.env` or `app.json`.
 - **Supabase connection issues?**
   - Verify your Supabase URL and anon key.

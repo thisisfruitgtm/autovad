@@ -66,13 +66,19 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    console.log('[GoogleSignIn] Button pressed');
     setLoading(true);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        Alert.alert(t('auth.loginFailed'), error instanceof Error ? error.message : 'An error occurred');
+        console.error('[GoogleSignIn] Error:', error);
+        Alert.alert(
+          t('auth.loginFailed'),
+          error instanceof Error ? error.message : 'An error occurred during Google sign in'
+        );
       }
     } catch (error) {
+      console.error('[GoogleSignIn] Exception:', error);
       Alert.alert('Eroare', 'A apărut o eroare neașteptată');
     } finally {
       setLoading(false);

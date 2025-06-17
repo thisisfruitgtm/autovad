@@ -159,7 +159,7 @@ function Feed() {
   const handleLike = useCallback(async (carId: string) => {
     if (!user) {
       Alert.alert(
-        'Conectează-te pentru a aprecia',
+        'Conectează-te pentru a aprecia!',
         'Pentru a aprecia mașini și a accesa toate funcțiile, te rog să te conectezi.',
         [
           { text: 'Mai târziu', style: 'cancel' },

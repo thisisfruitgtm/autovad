@@ -1,47 +1,49 @@
 {
   "expo": {
-    "name": "Autovad - Car Marketplace",
-    "slug": "Autovad-car-marketplace",
+    "name": "Autovad",
+    "slug": "autovad",
     "version": "1.0.0",
-    "sdkVersion": "53.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "Autovad",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
+      "bundleIdentifier": "com.autovad.app",
       "supportsTablet": true,
-      "bundleIdentifier": "com.Autovad.app"
+      "runtimeVersion": "1.0.0"
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#000000"
-      },
-      "package": "com.Autovad.app"
+      "package": "com.autovad.app",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
-      "bundler": "metro",
-      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
+    "scheme": "autovad",
     "plugins": [
-      "expo-router",
-      "expo-font",
-      "expo-camera",
-      "expo-image-picker",
-      "expo-web-browser",
-      "expo-video"
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {
-        "origin": false
-      },
-      "supabaseUrl": "https://mktfybjfxzhvpmnepshq.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdGZ5YmpmeHpodnBtbmVwc2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwNTkwMDksImV4cCI6MjA2NTYzNTAwOX0.Z8jufqlJIEkJ4SQkricOqIC4XnCFz0Odq2QRB9Wpm_8"
+      "router": {},
+      "eas": {
+        "projectId": "50a3ddf4-cb9c-4921-b1f5-0134e7e9748e"
+      }
+    },
+    "owner": "mihaimar",
+    "updates": {
+      "url": "https://u.expo.dev/50a3ddf4-cb9c-4921-b1f5-0134e7e9748e"
     }
   }
 }

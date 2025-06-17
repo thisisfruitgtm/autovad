@@ -4,6 +4,9 @@ import { supabase } from '@/lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -13,7 +16,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -21,9 +24,7 @@ export function useAuth() {
     });
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -64,32 +65,82 @@ export function useAuth() {
 
   const signInWithGoogle = async () => {
     try {
-      const redirectUrl = makeRedirectUri({
-        path: '/(auth)',
-        scheme: 'Autovad',
-      });
-
+      const redirectTo = makeRedirectUri({ native: 'autovad://auth/callback' });
+      console.log('[Auth] Using redirect URL:', redirectTo);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
+        options: { redirectTo },
       });
-
       if (error) throw error;
-      return { data, error: null };
+      if (data?.url) {
+        await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      }
     } catch (error) {
-      console.error('Error signing in with Google:', error);
-      return { data: null, error };
+      console.error('[Auth] Error in signInWithGoogle:', error);
+      return { error };
+    }
+  };
+
+  const handleAuthCallback = async (url: string) => {
+    try {
+      console.log('[Auth] Handling auth callback with URL:', url);
+      
+      // Extract the code from the URL
+      const { queryParams } = Linking.parse(url);
+      const code = queryParams?.code as string;
+      const state = queryParams?.state as string;
+      
+      console.log('[Auth] Extracted code and state:', { 
+        code: code ? 'Present' : 'Not found',
+        state: state ? 'Present' : 'Not found'
+      });
+      
+      // Verify state
+      const savedState = await AsyncStorage.getItem('oauth_state');
+      console.log('[Auth] Verifying state:', { 
+        received: state,
+        saved: savedState,
+        match: state === savedState
+      });
+      
+      if (state !== savedState) {
+        throw new Error('Invalid state parameter');
+      }
+      
+      // Exchange the code for a session directly with Supabase
+      console.log('[Auth] Exchanging code for session...');
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      
+      if (error) {
+        console.error('[Auth] Error exchanging code for session:', error);
+        throw error;
+      }
+
+      console.log('[Auth] Session exchange successful:', {
+        user: data.user ? {
+          id: data.user.id,
+          email: data.user.email
+        } : null,
+        session: data.session ? 'Present' : null
+      });
+      
+      // Clear the state
+      await AsyncStorage.removeItem('oauth_state');
+      
+      // Navigate to the appropriate screen
+      console.log('[Auth] Navigating to home screen...');
+      router.replace('/');
+      
+      return { session: data.session, user: data.user };
+    } catch (error) {
+      console.error('[Auth] Error in handleAuthCallback:', error);
+      throw error;
     }
   };
 
   const signOut = async () => {
-    return await supabase.auth.signOut();
+    await supabase.auth.signOut();
+    router.replace('/login');
   };
 
   return {
@@ -99,6 +150,7 @@ export function useAuth() {
     signUp,
     signIn,
     signInWithGoogle,
+    handleAuthCallback,
     signOut,
   };
 }

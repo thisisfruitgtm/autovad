@@ -1,94 +1,95 @@
 import React, { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { useFonts } from 'expo-font';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold
-} from '@expo-google-fonts/inter';
-import { SplashScreen } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { useOnboarding } from '../hooks/useOnboarding';
+import { useOnboarding } from '@/hooks/useOnboarding';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { router } from 'expo-router';
 import '../lib/i18n'; // Initialize i18n
+import * as Linking from 'expo-linking';
+import { supabase } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [isLayoutReady, setIsLayoutReady] = useState(false);
   useFrameworkReady();
-  const { loading: authLoading, user } = useAuth();
+  const { loading: authLoading, user, session, handleAuthCallback } = useAuth();
   const { hasCompletedOnboarding, loading: onboardingLoading } = useOnboarding();
+  const colorScheme = useColorScheme();
+  const segments = useSegments();
+  const router = useRouter();
 
   const [fontsLoaded, fontError] = useFonts({
-    'Inter-Regular': Inter_400Regular,
-    'Inter-Medium': Inter_500Medium,
-    'Inter-SemiBold': Inter_600SemiBold,
-    'Inter-Bold': Inter_700Bold,
+    // Add your fonts here
   });
 
   useEffect(() => {
-    if ((fontsLoaded || fontError) && !authLoading && !onboardingLoading) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, authLoading, onboardingLoading]);
+  }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    // console.log('🔄 RootLayout: Navigation check', {
-    //   isLayoutReady,
-    //   fontsLoaded: fontsLoaded || fontError,
-    //   authLoading,
-    //   onboardingLoading,
-    //   user: !!user,
-    //   hasCompletedOnboarding
-    // });
-
-    if (isLayoutReady && (fontsLoaded || fontError) && !authLoading && !onboardingLoading) {
-      // Handle initial routing only after layout is ready
-      if (!user && hasCompletedOnboarding === false) {
-        // First time user - show onboarding
-        // console.log('🚀 RootLayout: Navigating to onboarding');
-        router.replace('/(onboarding)/intro');
-      } else if (!user && hasCompletedOnboarding === true) {
-        // Returning user without auth - allow them to browse first
-        // console.log('🚀 RootLayout: Navigating to tabs (returning user)');
-        router.replace('/(tabs)');
-      } else if (user) {
-        // Authenticated user - show main app
-        // console.log('🚀 RootLayout: Navigating to tabs (authenticated user)');
-        router.replace('/(tabs)');
-      }
-    }
-  }, [isLayoutReady, fontsLoaded, fontError, authLoading, onboardingLoading, user, hasCompletedOnboarding]);
-
-  useEffect(() => {
-    // Set layout as ready after a small delay to ensure mounting is complete
-    const timer = setTimeout(() => {
-      // console.log('✅ RootLayout: Layout ready');
-      setIsLayoutReady(true);
-    }, 100);
-    
-    return () => clearTimeout(timer);
+    // Set layout as ready after initial mount
+    setIsLayoutReady(true);
   }, []);
 
-  if ((!fontsLoaded && !fontError) || authLoading || onboardingLoading) {
-    // console.log('⏳ RootLayout: Still loading...', {
-    //   fontsLoaded: fontsLoaded || fontError,
-    //   authLoading,
-    //   onboardingLoading
-    // });
+  useEffect(() => {
+    if (!isLayoutReady) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!session && !inAuthGroup) {
+      // Redirect to the sign-in page if not signed in
+      router.replace('/login');
+    } else if (session && inAuthGroup) {
+      // Redirect to the home page if signed in
+      router.replace('/');
+    }
+  }, [session, segments, isLayoutReady]);
+
+  useEffect(() => {
+    if (!isLayoutReady) return;
+
+    // Handle deep links for authentication
+    const subscription = Linking.addEventListener('url', async (event) => {
+      console.log('Deep link received:', event.url);
+      
+      // Check if this is an auth callback
+      if (event.url.includes('auth/callback')) {
+        try {
+          await handleAuthCallback(event.url);
+        } catch (error) {
+          console.error('Error handling auth callback:', error);
+          router.replace('/login');
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [handleAuthCallback, isLayoutReady]);
+
+  if (!isLayoutReady || (!fontsLoaded && !fontError) || authLoading || onboardingLoading) {
     return null;
   }
 
-  // console.log('🎨 RootLayout: Rendering Stack');
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
+          },
+          headerTintColor: colorScheme === 'dark' ? '#fff' : '#000',
+        }}
+      >
         <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
