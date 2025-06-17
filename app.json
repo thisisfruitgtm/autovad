@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Autovad - Car Marketplace",
+    "slug": "Autovad-car-marketplace",
+    "version": "1.0.0",
+    "sdkVersion": "53.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "Autovad",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.Autovad.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.Autovad.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-camera",
+      "expo-image-picker",
+      "expo-web-browser",
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "supabaseUrl": "https://mktfybjfxzhvpmnepshq.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdGZ5YmpmeHpodnBtbmVwc2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwNTkwMDksImV4cCI6MjA2NTYzNTAwOX0.Z8jufqlJIEkJ4SQkricOqIC4XnCFz0Odq2QRB9Wpm_8"
+    }
+  }
+}
