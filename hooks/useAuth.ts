@@ -69,20 +69,21 @@ export function useAuth() {
       let redirectTo: string;
       
       if (__DEV__) {
-        // For development, use the expo dev server URL
+        // For development, use expo scheme (works universally with Expo Go)
         redirectTo = makeRedirectUri({
-          scheme: undefined, // Let Expo decide the scheme
+          scheme: 'exp',
           path: 'auth/callback'
         });
       } else {
         // For production, use the custom scheme
         redirectTo = makeRedirectUri({ 
-          native: 'autovad://auth/callback',
+          scheme: 'autovad',
           path: 'auth/callback'
         });
       }
       
       console.log('[Auth] Using redirect URL:', redirectTo);
+      console.log('[Auth] Environment: ', __DEV__ ? 'Development' : 'Production');
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',

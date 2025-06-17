@@ -11,17 +11,13 @@ https://autovad.app
 
 ### Redirect URLs:
 ```
-# Development (Expo Go)
-exp://**
-
-# Development (Local Server)  
-http://localhost:8082/auth/callback
-http://localhost:3000/auth/callback
+# Development (Expo Go - Universal)
+exp://auth/callback
 
 # Production (Custom Scheme)
 autovad://auth/callback
 
-# Production (Web)
+# Production (Web - if needed)
 https://autovad.app/auth/callback
 https://autovad.app/**
 ```
@@ -42,9 +38,9 @@ exp://localhost:8082
 
 ## 3. Testare în Development
 
-1. Rulează `npx expo start --lan`
-2. Notează IP-ul afișat (ex: `192.168.0.197:8082`)
-3. Adaugă în Supabase redirect URLs: `exp://192.168.0.197:8082/**`
+1. Rulează `npx expo start`
+2. URL-ul de redirect va fi automat: `exp://auth/callback`
+3. Nu mai este nevoie să configurezi IP-uri specifice!
 
 ## 4. Environment Variables
 
@@ -63,7 +59,8 @@ Pentru debugging, verifică în console:
 
 ## 6. Note Importante
 
-- Pentru Expo Go în development, se folosește scheme-ul `exp://`
-- Pentru build-uri native, se folosește scheme-ul custom `autovad://`
-- Wildcard `**` permite orice sub-path
-- URL-urile trebuie să fie exact identice în Supabase și aplicație 
+- Pentru Expo Go în development, se folosește scheme-ul universal `exp://auth/callback`
+- Pentru build-uri native, se folosește scheme-ul custom `autovad://auth/callback`
+- Nu mai este nevoie de configurări specifice de IP sau port
+- URL-urile trebuie să fie exact identice în Supabase și aplicație
+- Scheme-ul `exp://` funcționează universal cu orice Expo Go client 
