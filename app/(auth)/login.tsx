@@ -69,12 +69,12 @@ export default function LoginScreen() {
     console.log('[GoogleSignIn] Button pressed');
     setLoading(true);
     try {
-      const { error } = await signInWithGoogle();
-      if (error) {
-        console.error('[GoogleSignIn] Error:', error);
+      const result = await signInWithGoogle();
+      if (result?.error) {
+        console.error('[GoogleSignIn] Error:', result.error);
         Alert.alert(
           t('auth.loginFailed'),
-          error instanceof Error ? error.message : 'An error occurred during Google sign in'
+          result.error instanceof Error ? result.error.message : 'An error occurred during Google sign in'
         );
       }
     } catch (error) {
@@ -306,6 +306,18 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 </Link>
               </View>
+
+              {/* Debug Link - Only in development */}
+              {__DEV__ && (
+                <View style={styles.debugContainer}>
+                  <TouchableOpacity 
+                    style={styles.debugButton}
+                    onPress={() => router.push('/debug-oauth' as any)}
+                  >
+                    <Text style={styles.debugText}>🔧 Debug OAuth</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </Animated.View>
           </View>
         </ScrollView>
@@ -530,5 +542,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#F97316',
+  },
+  debugContainer: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  debugButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#333',
+  },
+  debugText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#888',
   },
 });

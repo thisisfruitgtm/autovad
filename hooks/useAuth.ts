@@ -69,9 +69,8 @@ export function useAuth() {
       let redirectTo: string;
       
       if (__DEV__) {
-        // For development, use expo scheme (works universally with Expo Go)
+        // For development, let Expo Go decide the full URL structure (includes --)
         redirectTo = makeRedirectUri({
-          scheme: 'exp',
           path: 'auth/callback'
         });
       } else {
