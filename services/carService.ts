@@ -1,7 +1,15 @@
 import { Car } from '@/types/car';
 
-const SUPABASE_URL = 'https://mktfybjfxzhvpmnepshq.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdGZ5YmpmeHpodnBtbmVwc2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwNTkwMDksImV4cCI6MjA2NTYzNTAwOX0.Z8jufqlJIEkJ4SQkricOqIC4XnCFz0Odq2QRB9Wpm_8';
+// Use environment variables for security
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+// Validate environment variables
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ CarService: Missing Supabase environment variables');
+  console.error('EXPO_PUBLIC_SUPABASE_URL:', !!SUPABASE_URL);
+  console.error('EXPO_PUBLIC_SUPABASE_ANON_KEY:', !!SUPABASE_ANON_KEY);
+}
 
 // Mock data as fallback
 const mockCars: Car[] = [
@@ -96,8 +104,8 @@ export class CarService {
         const response = await fetch(url, {
           ...options,
           headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY!,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY!}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             ...options.headers,
@@ -123,8 +131,24 @@ export class CarService {
     throw new Error('All retry attempts failed');
   }
 
+  private static getEnhancedMockCars(): Car[] {
+    // Enhanced mock data with more realistic values
+    return mockCars.map(car => ({
+      ...car,
+      likes_count: Math.floor(Math.random() * 100) + 10,
+      comments_count: Math.floor(Math.random() * 25) + 3,
+      created_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+    }));
+  }
+
   static async getCars(): Promise<Car[]> {
     console.log('🚗 CarService: Starting to fetch cars...');
+    
+    // Check if environment variables are available
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.warn('⚠️ CarService: Environment variables not available, using mock data');
+      return this.getEnhancedMockCars();
+    }
     
     try {
       // Optimized query with better performance
@@ -182,15 +206,7 @@ export class CarService {
       console.error('❌ CarService: Failed to fetch cars from database:', error);
       console.log('🎭 CarService: Using enhanced mock data as fallback...');
       
-      // Enhanced mock data with more realistic values
-      const enhancedMockCars = mockCars.map(car => ({
-        ...car,
-        likes_count: Math.floor(Math.random() * 100) + 10,
-        comments_count: Math.floor(Math.random() * 25) + 3,
-        created_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-      }));
-      
-      return enhancedMockCars;
+      return this.getEnhancedMockCars();
     }
   }
 
