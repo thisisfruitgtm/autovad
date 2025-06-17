@@ -8,6 +8,7 @@ import {
   Alert,
   TouchableOpacity,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { CarPost } from '@/components/CarPost';
@@ -15,7 +16,16 @@ import { useCars } from '@/hooks/useCars';
 import { useAuth } from '@/hooks/useAuth';
 import { useViewedCars } from '@/hooks/useViewedCars';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Car, X } from 'lucide-react-native';
+import { Car, X, RefreshCw } from 'lucide-react-native';
+import Animated, { 
+  FadeInDown, 
+  FadeInUp, 
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  Easing,
+} from 'react-native-reanimated';
 
 const { height } = Dimensions.get('window');
 
@@ -24,14 +34,19 @@ const MemoizedCarPost = React.memo(CarPost);
 
 function Feed() {
   const { user } = useAuth();
-  const { cars, loading, error, likeCar, viewCar } = useCars();
+  const { cars, loading, error, likeCar, viewCar, refreshCars } = useCars();
   const { viewedCount, shouldShowLogin, incrementViewedCount, resetViewedCount, minViewsRequired } = useViewedCars();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentVisibleIndex, setCurrentVisibleIndex] = useState(0);
   const [isTabFocused, setIsTabFocused] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { t } = useTranslation();
   const viewedCarsRef = useRef(new Set<string>());
   const hasUserInteracted = useRef(false);
+  
+  // Loading animation values
+  const loadingRotation = useSharedValue(0);
+  const loadingOpacity = useSharedValue(1);
 
   // console.log('🏠 Feed: Component rendering in tabs');
 
@@ -96,6 +111,42 @@ function Feed() {
   // }, []);
 
   // console.log('🏠 Feed render - user:', !!user, 'viewedCount:', viewedCount, 'cars:', cars.length, 'loading:', loading, 'error:', error);
+
+  // Enhanced loading animation
+  useEffect(() => {
+    if (loading) {
+      loadingRotation.value = withRepeat(
+        withTiming(360, { duration: 2000, easing: Easing.linear }),
+        -1,
+        false
+      );
+      loadingOpacity.value = withRepeat(
+        withTiming(0.3, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    } else {
+      loadingRotation.value = 0;
+      loadingOpacity.value = 1;
+    }
+  }, [loading]);
+
+  const loadingAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${loadingRotation.value}deg` }],
+    opacity: loadingOpacity.value,
+  }));
+
+  // Pull to refresh handler
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshCars();
+    } catch (error) {
+      console.error('Error refreshing cars:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshCars]);
 
   const viewabilityConfigRef = useRef({
     viewAreaCoveragePercentThreshold: 60, // Item must be 60% visible to count as viewed
@@ -248,6 +299,9 @@ function Feed() {
     viewabilityConfig: viewabilityConfigRef.current,
     onScrollBeginDrag,
     onMomentumScrollEnd,
+    // Pull to refresh
+    refreshing,
+    onRefresh: handleRefresh,
     // Performance optimizations
     removeClippedSubviews: true,
     maxToRenderPerBatch: 1,
@@ -259,35 +313,88 @@ function Feed() {
       offset: height * index,
       index,
     }),
-  }), [cars, renderCarPost, height, onScrollBeginDrag, onMomentumScrollEnd]);
+  }), [cars, renderCarPost, height, onScrollBeginDrag, onMomentumScrollEnd, refreshing, handleRefresh]);
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Car size={48} color="#F97316" />
-        <Text style={styles.loadingText}>{t('feed.loadingCars')}</Text>
-      </View>
+      <Animated.View 
+        entering={FadeInUp.delay(100)} 
+        style={styles.loadingContainer}
+      >
+        <Animated.View style={loadingAnimatedStyle}>
+          <Car size={64} color="#F97316" />
+        </Animated.View>
+        <Animated.Text 
+          entering={FadeInDown.delay(300)}
+          style={styles.loadingText}
+        >
+          {t('feed.loadingCars')}
+        </Animated.Text>
+        <Animated.View 
+          entering={FadeInDown.delay(500)}
+          style={styles.loadingSubtitle}
+        >
+          <Text style={styles.loadingSubtitleText}>
+            Se încarcă cele mai noi mașini pentru tine...
+          </Text>
+        </Animated.View>
+      </Animated.View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{t('feed.failedToLoad')}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
-          <Text style={styles.retryButtonText}>{t('feed.retry')}</Text>
-        </TouchableOpacity>
-      </View>
+      <Animated.View 
+        entering={FadeInUp.delay(100)} 
+        style={styles.errorContainer}
+      >
+        <Animated.View entering={FadeInDown.delay(200)}>
+          <RefreshCw size={64} color="#EF4444" />
+        </Animated.View>
+        <Animated.Text 
+          entering={FadeInDown.delay(300)}
+          style={styles.errorText}
+        >
+          {t('feed.failedToLoad')}
+        </Animated.Text>
+        <Animated.View entering={FadeInDown.delay(400)}>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+            <RefreshCw size={20} color="#000" />
+            <Text style={styles.retryButtonText}>{t('feed.retry')}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
     );
   }
 
   if (cars.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Car size={64} color="#333" />
-        <Text style={styles.emptyTitle}>{t('feed.noCarsAvailable')}</Text>
-        <Text style={styles.emptySubtitle}>{t('feed.beFirstToPost')}</Text>
-      </View>
+      <Animated.View 
+        entering={FadeInUp.delay(100)} 
+        style={styles.emptyContainer}
+      >
+        <Animated.View entering={FadeInDown.delay(200)}>
+          <Car size={80} color="#333" />
+        </Animated.View>
+        <Animated.Text 
+          entering={FadeInDown.delay(300)}
+          style={styles.emptyTitle}
+        >
+          {t('feed.noCarsAvailable')}
+        </Animated.Text>
+        <Animated.Text 
+          entering={FadeInDown.delay(400)}
+          style={styles.emptySubtitle}
+        >
+          {t('feed.beFirstToPost')}
+        </Animated.Text>
+        <Animated.View entering={FadeInDown.delay(500)}>
+          <TouchableOpacity style={styles.exploreButton} onPress={handleRefresh}>
+            <RefreshCw size={20} color="#F97316" />
+            <Text style={styles.exploreButtonText}>Reîncarcă</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
     );
   }
 
@@ -372,15 +479,33 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F97316',
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#F97316',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   retryButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#000',
+  },
+  loadingSubtitle: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  loadingSubtitleText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -471,6 +596,21 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
-
-
+  exploreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#F97316',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 24,
+  },
+  exploreButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#F97316',
+  },
 });
