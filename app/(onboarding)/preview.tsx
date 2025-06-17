@@ -31,29 +31,29 @@ export default function PreviewScreen() {
   }, []);
 
   useEffect(() => {
-    // After viewing 5 cars, redirect to login
+    // After viewing 5 cars, complete onboarding and redirect to main feed
     if (previewCarsViewed >= 5) {
       completeOnboarding();
-      router.replace('/(auth)/login');
+      router.replace('/(tabs)'); // Redirect to main feed instead of login
     }
   }, [previewCarsViewed]);
 
   const handleLike = (carId: string) => {
-    // Redirect to login when trying to like
+    // Complete onboarding and redirect to main feed when trying to like
     completeOnboarding();
-    router.replace('/(auth)/login');
+    router.replace('/(tabs)');
   };
 
   const handleComment = (carId: string) => {
-    // Redirect to login when trying to comment
+    // Complete onboarding and redirect to main feed when trying to comment
     completeOnboarding();
-    router.replace('/(auth)/login');
+    router.replace('/(tabs)');
   };
 
   const handleShare = (carId: string) => {
-    // Redirect to login when trying to share
+    // Complete onboarding and redirect to main feed when trying to share
     completeOnboarding();
-    router.replace('/(auth)/login');
+    router.replace('/(tabs)');
   };
 
   const handleCarView = async (carId: string) => {
@@ -176,7 +176,7 @@ export default function PreviewScreen() {
               style={styles.authButton}
               onPress={() => {
                 completeOnboarding();
-                router.replace('/(auth)/login');
+                router.replace('/(tabs)');
               }}
             >
               <Text style={styles.authButtonText}>Continuă</Text>
