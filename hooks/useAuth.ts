@@ -65,15 +65,47 @@ export function useAuth() {
 
   const signInWithGoogle = async () => {
     try {
-      const redirectTo = makeRedirectUri({ native: 'autovad://auth/callback' });
+      // Use different redirect URLs for development and production
+      let redirectTo: string;
+      
+      if (__DEV__) {
+        // For development, use the expo dev server URL
+        redirectTo = makeRedirectUri({
+          scheme: undefined, // Let Expo decide the scheme
+          path: 'auth/callback'
+        });
+      } else {
+        // For production, use the custom scheme
+        redirectTo = makeRedirectUri({ 
+          native: 'autovad://auth/callback',
+          path: 'auth/callback'
+        });
+      }
+      
       console.log('[Auth] Using redirect URL:', redirectTo);
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo },
+        options: { 
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
+        },
       });
+      
       if (error) throw error;
+      
       if (data?.url) {
-        await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[Auth] Opening OAuth URL:', data.url);
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log('[Auth] WebBrowser result:', result);
+        
+        if (result.type === 'success' && result.url) {
+          console.log('[Auth] Success URL received:', result.url);
+          return await handleAuthCallback(result.url);
+        }
       }
     } catch (error) {
       console.error('[Auth] Error in signInWithGoogle:', error);
@@ -85,53 +117,66 @@ export function useAuth() {
     try {
       console.log('[Auth] Handling auth callback with URL:', url);
       
-      // Extract the code from the URL
+      // Extract tokens directly from URL fragment or query params
       const { queryParams } = Linking.parse(url);
-      const code = queryParams?.code as string;
-      const state = queryParams?.state as string;
       
-      console.log('[Auth] Extracted code and state:', { 
-        code: code ? 'Present' : 'Not found',
-        state: state ? 'Present' : 'Not found'
-      });
-      
-      // Verify state
-      const savedState = await AsyncStorage.getItem('oauth_state');
-      console.log('[Auth] Verifying state:', { 
-        received: state,
-        saved: savedState,
-        match: state === savedState
-      });
-      
-      if (state !== savedState) {
-        throw new Error('Invalid state parameter');
+      // Check for tokens in URL fragment (common for implicit flow)
+      let params = queryParams;
+      if (url.includes('#')) {
+        const fragmentPart = url.split('#')[1];
+        if (fragmentPart) {
+          const fragmentParams = new URLSearchParams(fragmentPart);
+          params = Object.fromEntries(fragmentParams);
+          console.log('[Auth] Found fragment params:', params);
+        }
       }
       
-      // Exchange the code for a session directly with Supabase
-      console.log('[Auth] Exchanging code for session...');
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      console.log('[Auth] URL params:', params);
       
-      if (error) {
-        console.error('[Auth] Error exchanging code for session:', error);
-        throw error;
+      // Check for access_token and refresh_token (direct token response)
+      if (params?.access_token && params?.refresh_token) {
+        console.log('[Auth] Found tokens in URL, setting session...');
+        
+        const { data, error } = await supabase.auth.setSession({
+          access_token: params.access_token as string,
+          refresh_token: params.refresh_token as string,
+        });
+        
+        if (error) {
+          console.error('[Auth] Error setting session:', error);
+          throw error;
+        }
+        
+        console.log('[Auth] Session set successfully');
+        router.replace('/(tabs)');
+        return { session: data.session, user: data.user };
       }
-
-      console.log('[Auth] Session exchange successful:', {
-        user: data.user ? {
-          id: data.user.id,
-          email: data.user.email
-        } : null,
-        session: data.session ? 'Present' : null
-      });
       
-      // Clear the state
-      await AsyncStorage.removeItem('oauth_state');
+      // Check for authorization code (PKCE flow)
+      if (params?.code) {
+        console.log('[Auth] Found authorization code, exchanging for session...');
+        
+        const { data, error } = await supabase.auth.exchangeCodeForSession(params.code as string);
+        
+        if (error) {
+          console.error('[Auth] Error exchanging code for session:', error);
+          throw error;
+        }
+        
+        console.log('[Auth] Session exchange successful');
+        router.replace('/(tabs)');
+        return { session: data.session, user: data.user };
+      }
       
-      // Navigate to the appropriate screen
-      console.log('[Auth] Navigating to home screen...');
-      router.replace('/');
+      // Check for error in callback
+      if (params?.error) {
+        console.error('[Auth] OAuth error:', params.error, params.error_description);
+        throw new Error(params.error_description as string || params.error as string);
+      }
       
-      return { session: data.session, user: data.user };
+      console.warn('[Auth] No tokens or code found in callback URL');
+      throw new Error('No authentication data found in callback');
+      
     } catch (error) {
       console.error('[Auth] Error in handleAuthCallback:', error);
       throw error;

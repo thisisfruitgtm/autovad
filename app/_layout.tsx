@@ -58,15 +58,36 @@ export default function RootLayout() {
 
     // Handle deep links for authentication
     const subscription = Linking.addEventListener('url', async (event) => {
-      console.log('Deep link received:', event.url);
+      console.log('[Layout] Deep link received:', event.url);
       
-      // Check if this is an auth callback
-      if (event.url.includes('auth/callback')) {
+      // Check if this is an auth callback (check for common OAuth parameters)
+      if (event.url.includes('auth/callback') || 
+          event.url.includes('access_token') || 
+          event.url.includes('code=') ||
+          event.url.includes('error=')) {
+        console.log('[Layout] Auth callback detected, handling...');
         try {
           await handleAuthCallback(event.url);
         } catch (error) {
-          console.error('Error handling auth callback:', error);
-          router.replace('/login');
+          console.error('[Layout] Error handling auth callback:', error);
+          router.replace('/(auth)/login');
+        }
+      }
+    });
+
+    // Also check if we opened via a deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log('[Layout] Initial URL:', url);
+        if (url.includes('auth/callback') || 
+            url.includes('access_token') || 
+            url.includes('code=') ||
+            url.includes('error=')) {
+          console.log('[Layout] Initial auth callback detected, handling...');
+          handleAuthCallback(url).catch((error) => {
+            console.error('[Layout] Error handling initial auth callback:', error);
+            router.replace('/(auth)/login');
+          });
         }
       }
     });
