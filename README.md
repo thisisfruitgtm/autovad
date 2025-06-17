@@ -95,6 +95,32 @@ yarn start
 - iOS: Press `i` in the terminal or click "Run on iOS simulator" in Expo Dev Tools
 - Android: Press `a` in the terminal or click "Run on Android device/emulator" in Expo Dev Tools
 
+## Google Login Usage
+
+- On the login and register screens, you can sign in or register with Google by pressing the "Sign in with Google" button.
+- Make sure your Google OAuth credentials are set up in Supabase and your `.env` or `app.json` as described above.
+- The app will handle the OAuth flow and automatically create or log in the user.
+
+## Security Best Practices
+
+- **Never commit your `.env` file**. It is already included in `.gitignore`.
+- Do not expose your Supabase keys or Google client secrets in the codebase.
+- Use environment variables for all sensitive configuration.
+- If you need to share configuration, use a `.env.example` file (without real secrets).
+
+## Troubleshooting
+
+- **Google Login not working?**
+  - Double-check your Google OAuth setup in Supabase and Google Cloud Console.
+  - Make sure your redirect URIs are correct.
+  - Ensure your credentials are present in `.env` or `app.json`.
+- **Supabase connection issues?**
+  - Verify your Supabase URL and anon key.
+  - Check for typos in your environment variables.
+- **App not starting?**
+  - Run `npm install` or `yarn install` to ensure all dependencies are present.
+  - Make sure you are using a supported Node.js version (v18+).
+
 ## Project Structure
 
 ```
