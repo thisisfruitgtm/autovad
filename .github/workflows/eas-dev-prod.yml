@@ -9,8 +9,8 @@ on:
 
 jobs:
   ota-update-dev:
-    if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
     steps:
       - uses: actions/checkout@v4
       - uses: expo/expo-github-action@v8
@@ -21,8 +21,8 @@ jobs:
         run: eas update --branch dev --non-interactive --message "OTA update (dev): ${{ github.sha }}"
 
   ota-update-main:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: expo/expo-github-action@v8
@@ -37,8 +37,8 @@ jobs:
         run: eas build --platform ios --non-interactive --profile production
 
   promote-dev-to-main:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'
     steps:
       - uses: actions/checkout@v4
       - uses: expo/expo-github-action@v8
