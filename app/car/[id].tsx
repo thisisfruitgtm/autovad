@@ -9,6 +9,8 @@ import {
   Dimensions,
   Alert,
   Linking,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -34,7 +36,7 @@ import {
   Car
 } from 'lucide-react-native';
 import { VideoCarousel } from '@/components/VideoCarousel';
-import ImageViewing from 'react-native-image-viewing';
+import { Image as ExpoImage } from 'expo-image';
 import { useTranslation } from '@/hooks/useTranslation';
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/database';
@@ -463,13 +465,46 @@ export default function CarDetailsScreen() {
       </View>
 
       {/* Full Screen Gallery Modal */}
-      <ImageViewing
-        images={allImages.map(uri => ({ uri }))}
-        imageIndex={galleryStartIndex}
+      <Modal
         visible={showFullScreenGallery}
+        transparent={true}
         onRequestClose={closeFullScreenGallery}
-        HeaderComponent={renderGalleryHeader}
-      />
+        animationType="fade"
+      >
+        <View style={styles.galleryModal}>
+          {renderGalleryHeader()}
+          
+          <TouchableOpacity 
+            style={styles.closeButton}
+            onPress={closeFullScreenGallery}
+          >
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+
+          <FlatList
+            data={allImages}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={galleryStartIndex}
+            getItemLayout={(data, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            renderItem={({ item }) => (
+              <View style={styles.galleryImageContainer}>
+                <ExpoImage
+                  source={{ uri: item }}
+                  style={styles.galleryImage}
+                  contentFit="contain"
+                />
+              </View>
+            )}
+            keyExtractor={(item, index) => index.toString()}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -902,5 +937,38 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: 'rgba(255, 255, 255, 0.9)',
     letterSpacing: 0.5,
+  },
+  galleryModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  closeButtonText: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#fff',
+  },
+  galleryImageContainer: {
+    width,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryImage: {
+    width: width - 40,
+    height: '80%',
   },
 });

@@ -42,6 +42,8 @@ web-build/
 *.tsbuildinfo
 
 # native
+ios/
+android/
 *.orig.*
 *.jks
 *.p8
