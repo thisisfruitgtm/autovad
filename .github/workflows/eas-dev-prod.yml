@@ -6,44 +6,48 @@ on:
       - dev
       - main
   workflow_dispatch:
+    inputs:
+      promote_from_branch:
+        description: 'Branch to promote from'
+        required: false
+        default: 'dev'
 
 jobs:
-  ota-update-dev:
+  ota-update:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref_name == 'dev' || github.ref_name == 'main'
     steps:
       - uses: actions/checkout@v4
-      - uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-      - name: EAS OTA Update (dev)
-        run: eas update --branch dev --non-interactive --message "OTA update (dev): ${{ github.sha }}"
 
-  ota-update-main:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
       - uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      - name: EAS OTA Update (main)
-        run: eas update --branch main --non-interactive --message "OTA update (main): ${{ github.sha }}"
+
+      - name: EAS OTA Update (${{ github.ref_name }})
+        run: eas update --branch ${{ github.ref_name }} --non-interactive --message "OTA update (${{ github.ref_name }}): ${{ github.sha }}"
+
       - name: EAS Build (Android)
+        if: github.ref_name == 'main'
         run: eas build --platform android --non-interactive --profile production
+
       - name: EAS Build (iOS)
+        if: github.ref_name == 'main'
         run: eas build --platform ios --non-interactive --profile production
 
   promote-dev-to-main:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
+
       - uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+
       - name: Promote dev to main
-        run: eas update:promote --from-branch dev --to-branch main --non-interactive --message "Promote dev to main: ${{ github.sha }}" 
+        run: |
+          FROM_BRANCH="${{ github.event.inputs.promote_from_branch }}"
+          echo "Promoting from $FROM_BRANCH to main..."
+          eas update:promote --from-branch "$FROM_BRANCH" --to-branch main --non-interactive --message "Promote $FROM_BRANCH to main: ${{ github.sha }}" 
