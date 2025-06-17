@@ -312,17 +312,7 @@ export default function LoginScreen() {
                 </Link>
               </View>
 
-              {/* Debug Link - Only in development */}
-              {__DEV__ && (
-                <View style={styles.debugContainer}>
-                  <TouchableOpacity 
-                    style={styles.debugButton}
-                    onPress={() => router.push('/debug-oauth' as any)}
-                  >
-                    <Text style={styles.debugText}>🔧 Debug OAuth</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+
             </Animated.View>
           </View>
         </ScrollView>
@@ -548,18 +538,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#F97316',
   },
-  debugContainer: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  debugButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#333',
-  },
-  debugText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#888',
-  },
+
 });
