@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Car } from '@/types/car';
 import { useAuth } from './useAuth';
 import { CarService } from '@/services/carService';
+import { supabase } from '@/lib/supabase';
 
 export function useCars() {
   const [cars, setCars] = useState<Car[]>([]);
@@ -18,7 +19,7 @@ export function useCars() {
 
     try {
       // console.log('🎭 useCars: Fetching cars using CarService...');
-      const fetchedCars = await CarService.getCars();
+      const fetchedCars = await CarService.getCars(user?.id);
       setCars(fetchedCars);
       // console.log(`✅ useCars: Loaded ${fetchedCars.length} cars`);
     } catch (error) {
@@ -44,7 +45,35 @@ export function useCars() {
       const car = cars.find(c => c.id === carId);
       if (!car) return;
 
-      const newLikedState = await CarService.toggleLike(carId, user.id, car.is_liked);
+      console.log(`💖 useCars: Toggling like for car ${carId}, current state: ${car.is_liked}`);
+
+      if (car.is_liked) {
+        // Unlike - delete the like
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .eq('car_id', carId)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('❌ useCars: Error unliking car:', error);
+          return;
+        }
+
+        console.log('✅ useCars: Successfully unliked car');
+      } else {
+        // Like - insert new like
+        const { error } = await supabase
+          .from('likes')
+          .insert({ car_id: carId, user_id: user.id });
+
+        if (error) {
+          console.error('❌ useCars: Error liking car:', error);
+          return;
+        }
+
+        console.log('✅ useCars: Successfully liked car');
+      }
 
       // Update local state
       setCars(prevCars =>
@@ -52,8 +81,8 @@ export function useCars() {
           c.id === carId
             ? {
                 ...c,
-                is_liked: newLikedState,
-                likes_count: newLikedState ? c.likes_count + 1 : c.likes_count - 1,
+                is_liked: !c.is_liked,
+                likes_count: c.is_liked ? c.likes_count - 1 : c.likes_count + 1,
               }
             : c
         )

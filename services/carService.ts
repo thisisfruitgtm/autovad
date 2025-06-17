@@ -141,7 +141,7 @@ export class CarService {
     }));
   }
 
-  static async getCars(): Promise<Car[]> {
+  static async getCars(userId?: string): Promise<Car[]> {
     console.log('🚗 CarService: Starting to fetch cars...');
     
     // Check if environment variables are available
@@ -151,8 +151,8 @@ export class CarService {
     }
     
     try {
-      // Optimized query with better performance
-      const url = `${SUPABASE_URL}/rest/v1/cars?select=*&status=eq.active&order=created_at.desc&limit=20`;
+      // Enhanced query to include likes information for authenticated users
+      let url = `${SUPABASE_URL}/rest/v1/cars?select=*&status=eq.active&order=created_at.desc&limit=20`;
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
@@ -170,6 +170,22 @@ export class CarService {
       
       const data = await response.json();
       console.log(`✅ CarService: Successfully fetched ${data.length} cars from database`);
+      
+      // Fetch likes for the user if authenticated
+      let userLikes: string[] = [];
+      if (userId) {
+        try {
+          const likesUrl = `${SUPABASE_URL}/rest/v1/likes?select=car_id&user_id=eq.${userId}`;
+          const likesResponse = await this.fetchWithRetry(likesUrl, { method: 'GET' });
+          if (likesResponse.ok) {
+            const likesData = await likesResponse.json();
+            userLikes = likesData.map((like: any) => like.car_id);
+            console.log(`✅ CarService: Fetched ${userLikes.length} user likes`);
+          }
+        } catch (error) {
+          console.warn('⚠️ CarService: Failed to fetch user likes, continuing without:', error);
+        }
+      }
       
       // Transform data to match Car interface with enhanced seller info
       const transformedCars: Car[] = data.map((car: any) => ({
@@ -195,7 +211,7 @@ export class CarService {
           verified: true,
         },
         created_at: car.created_at,
-        is_liked: false,
+        is_liked: userId ? userLikes.includes(car.id) : false,
         likes_count: car.likes_count || Math.floor(Math.random() * 50) + 5,
         comments_count: car.comments_count || Math.floor(Math.random() * 15) + 1,
       }));
@@ -210,19 +226,28 @@ export class CarService {
     }
   }
 
-  static async toggleLike(carId: string, userId: string, isLiked: boolean): Promise<boolean> {
+  static async toggleLike(carId: string, userId: string, isLiked: boolean, accessToken?: string): Promise<boolean> {
     try {
       const url = `${SUPABASE_URL}/rest/v1/likes`;
+      
+      // Use user's access token if provided, otherwise fallback to anon key
+      const authHeader = accessToken ? `Bearer ${accessToken}` : `Bearer ${SUPABASE_ANON_KEY!}`;
       
       if (isLiked) {
         // Unlike - delete the like
         await this.fetchWithRetry(`${url}?car_id=eq.${carId}&user_id=eq.${userId}`, {
           method: 'DELETE',
+          headers: {
+            'Authorization': authHeader,
+          },
         });
       } else {
         // Like - insert new like
         await this.fetchWithRetry(url, {
           method: 'POST',
+          headers: {
+            'Authorization': authHeader,
+          },
           body: JSON.stringify({ car_id: carId, user_id: userId }),
         });
       }
