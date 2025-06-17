@@ -118,9 +118,16 @@ function SearchScreen() {
         query = query.ilike('location', `%${filters.selectedLocation}%`);
       }
 
-      // Apply price range filter
+      // Apply price range filter with static price ranges
       if (filters.selectedPriceRange !== 'All') {
-        const priceRange = filterData.priceRanges.find(r => r.label === filters.selectedPriceRange);
+        const staticPriceRanges = [
+          { label: 'All', min: 0, max: null },
+          { label: '0-50k', min: 0, max: 50000 },
+          { label: '50k-100k', min: 50000, max: 100000 },
+          { label: '100k-200k', min: 100000, max: 200000 },
+          { label: '200k+', min: 200000, max: null },
+        ];
+        const priceRange = staticPriceRanges.find(r => r.label === filters.selectedPriceRange);
         if (priceRange) {
           query = query.gte('price', priceRange.min);
           if (priceRange.max) {
@@ -176,7 +183,7 @@ function SearchScreen() {
       setFiltering(false);
       setRefreshing(false);
     }
-  }, [filters, user, filterData.priceRanges]);
+  }, [filters, user]); // Remove filterData dependency
 
   const fetchFilterData = useCallback(async () => {
     try {
@@ -270,21 +277,26 @@ function SearchScreen() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchCars(false);
-  }, [filters, user, filterData.priceRanges]);
+  }, [fetchCars]);
 
   useEffect(() => {
+    // Only fetch filter data once on mount
     fetchFilterData();
-  }, [fetchFilterData]);
+    // Also fetch initial cars
+    fetchCars(true);
+  }, []);
 
   useEffect(() => {
-    if (cars.length === 0) {
-      // Initial load
-      fetchCars(true);
-    } else {
-      // Filtering
-      fetchCars(false);
+    // Skip initial render and only filter when filter data is loaded
+    if (filterData.makes.length > 1) {
+      // Debounce filter changes to avoid excessive API calls
+      const timeoutId = setTimeout(() => {
+        fetchCars(false);
+      }, 300); // 300ms debounce
+
+      return () => clearTimeout(timeoutId);
     }
-  }, [filters, user, filterData.priceRanges]);
+  }, [filters, user, fetchCars]); // Add fetchCars to dependencies
 
   const filteredCars = useMemo(() => {
     return cars; // Filtering is done on the server side
