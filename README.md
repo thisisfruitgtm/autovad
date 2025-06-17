@@ -180,3 +180,161 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Supabase](https://supabase.io/)
 - [React Native](https://reactnative.dev/)
 - [Lucide Icons](https://lucide.dev/)
+
+---
+
+## 🛠️ Developer Workflow Guide
+
+### Branch Strategy & CI/CD
+
+This project uses a modern development workflow with automated builds and over-the-air (OTA) updates:
+
+#### **`dev` branch (Development)**
+- Used for feature development and rapid testing
+- **On every push to `dev`**: Automatically triggers an **OTA update** on the `dev` channel
+- Perfect for testing with Expo Go or development builds
+
+#### **`main` branch (Production)**
+- Used for stable releases
+- **On every push to `main`**: Automatically triggers:
+  - **OTA update** on the `main` channel (production)
+  - **Native builds** for Android and iOS
+
+### Daily Development Workflow
+
+#### 1. **Development on `dev`**
+```bash
+# Make sure you're on the dev branch
+git checkout dev
+git pull origin dev
+
+# Make your changes
+# ...
+
+# Commit and push (triggers automatic OTA update on dev)
+git add .
+git commit -m "feat: add new feature"
+git push origin dev
+```
+
+#### 2. **Release to `main`**
+When ready for production release:
+```bash
+# Switch to main and merge from dev
+git checkout main
+git pull origin main
+git merge dev
+git push origin main
+```
+This push automatically triggers:
+- OTA update on the `main` channel
+- Native builds for Android and iOS
+
+#### 3. **Quick Promotion (without rebuild)**
+To quickly promote an update from `dev` to `main` without creating new builds:
+- Go to GitHub → **Actions** → **EAS Dev/Prod OTA & Build**
+- Click **Run workflow**
+- Select the `dev` branch
+- The workflow will promote the latest `dev` update directly to `main`
+
+### Testing & Development
+
+#### **With Expo Go (Recommended for development)**
+```bash
+# Start the development server
+npx expo start
+
+# Scan QR code with Expo Go on your phone
+```
+
+#### **With development builds**
+```bash
+# Build for Android
+eas build --platform android --profile development
+
+# Build for iOS  
+eas build --platform ios --profile development
+```
+
+### Manual Operations
+
+#### **Manual OTA Updates**
+```bash
+# Update on dev channel
+eas update --branch dev --message "Quick fix on dev"
+
+# Update on main channel (production)
+eas update --branch main --message "Production hotfix"
+
+# Promote from dev to main
+eas update:promote --from-branch dev --to-branch main
+```
+
+#### **Manual Builds**
+```bash
+# Production build for Android
+eas build --platform android --profile production
+
+# Production build for iOS
+eas build --platform ios --profile production
+
+# Build for both platforms
+eas build --platform all --profile production
+```
+
+### Monitoring & Analytics
+
+#### **Check builds and updates:**
+- [Expo Dashboard](https://expo.dev/accounts/mihaimar/projects/autovad)
+- [GitHub Actions](https://github.com/thisisfruitgtm/autovad/actions)
+
+#### **Check analytics and errors:**
+- Supabase Dashboard for backend monitoring
+- Expo Dashboard for crash reports and performance
+
+### Developer Setup Requirements
+
+#### **Additional Tools**
+```bash
+# EAS CLI
+npm install -g eas-cli
+
+# Login to EAS
+eas login
+```
+
+#### **Environment Variables**
+Make sure your `.env` file includes:
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://mktfybjfxzhvpmnepshq.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_API_URL=https://mktfybjfxzhvpmnepshq.supabase.co
+```
+
+### Common Developer Issues
+
+#### **Google OAuth not working?**
+1. For Expo Go, test only on physical devices (not simulator)
+2. Verify that `expo.dev/accounts/mihaimar/projects/autovad` lists the project
+3. For native builds, ensure URL scheme is configured (`autovad://`)
+
+#### **Builds failing?**
+1. Check that `EXPO_TOKEN` is set correctly in GitHub Secrets
+2. Ensure you have permissions for the Expo project
+3. Check GitHub Actions logs for details
+
+#### **OTA Updates not reaching users?**
+1. Verify runtime version (`runtimeVersion`) compatibility
+2. Ensure the build has EAS Update configured
+3. Check the correct channel on Expo Dashboard
+
+### Resources for Developers
+
+- [EAS Build Documentation](https://docs.expo.dev/build/introduction/)
+- [EAS Update Documentation](https://docs.expo.dev/eas-update/introduction/)
+- [Expo Development Workflow](https://docs.expo.dev/develop/development-builds/introduction/)
+- [GitHub Actions for EAS](https://docs.expo.dev/eas-update/github-actions/)
+
+---
+
+**Happy coding! 🚀**
