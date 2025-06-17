@@ -70,12 +70,17 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const result = await signInWithGoogle();
-      if (result?.error) {
+      
+      // Type guard to check if result has error property
+      if (result && 'error' in result && result.error) {
         console.error('[GoogleSignIn] Error:', result.error);
         Alert.alert(
           t('auth.loginFailed'),
           result.error instanceof Error ? result.error.message : 'An error occurred during Google sign in'
         );
+      } else {
+        // Success case - user should be automatically redirected by useAuth
+        console.log('[GoogleSignIn] Success');
       }
     } catch (error) {
       console.error('[GoogleSignIn] Exception:', error);

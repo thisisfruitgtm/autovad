@@ -63,7 +63,7 @@ export function useAuth() {
     });
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (): Promise<{ session?: Session | null; user?: User | null; error?: unknown }> => {
     try {
       // Use different redirect URLs for development and production
       let redirectTo: string;
@@ -93,7 +93,10 @@ export function useAuth() {
         },
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('[Auth] OAuth initiation error:', error);
+        return { error };
+      }
       
       if (data?.url) {
         console.log('[Auth] Opening OAuth URL:', data.url);
@@ -102,9 +105,23 @@ export function useAuth() {
         
         if (result.type === 'success' && result.url) {
           console.log('[Auth] Success URL received:', result.url);
-          return await handleAuthCallback(result.url);
+          try {
+            const authResult = await handleAuthCallback(result.url);
+            return { session: authResult.session, user: authResult.user };
+          } catch (callbackError) {
+            console.error('[Auth] Callback handling error:', callbackError);
+            return { error: callbackError };
+          }
+        } else if (result.type === 'cancel') {
+          console.log('[Auth] User cancelled OAuth flow');
+          return { error: new Error('User cancelled authentication') };
+        } else {
+          console.error('[Auth] Unexpected WebBrowser result:', result);
+          return { error: new Error('Authentication flow failed') };
         }
       }
+      
+      return { error: new Error('No OAuth URL received from Supabase') };
     } catch (error) {
       console.error('[Auth] Error in signInWithGoogle:', error);
       return { error };
