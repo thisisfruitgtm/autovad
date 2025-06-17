@@ -56,8 +56,7 @@ export default function RootLayout() {
       inOnboardingGroup
     });
 
-    // If user has completed onboarding, allow them to access the main feed (preview mode)
-    // Only redirect to login if they're trying to access auth screens while authenticated
+    // Navigation logic: allow users to access auth screens when needed
     if (session && inAuthGroup) {
       // User is authenticated but on auth screens - redirect to main feed
       console.log('[Layout] Redirecting authenticated user from auth to main feed');
@@ -66,11 +65,10 @@ export default function RootLayout() {
       // User hasn't completed onboarding - start onboarding flow
       console.log('[Layout] Redirecting new user to onboarding');
       router.replace('/(onboarding)/intro');
-    } else if (!session && hasCompletedOnboarding && inAuthGroup) {
-      // User completed onboarding but is on auth screen - redirect to main feed (preview mode)
-      console.log('[Layout] Redirecting user from auth to main feed (preview mode)');
-      router.replace('/');
     }
+    
+    // Allow unauthenticated users to access auth screens even after onboarding
+    // Don't force redirect away from login/register screens for unauthenticated users
     
     // Allow access to main feed for users who completed onboarding (authenticated or not)
     // The useViewedCars hook in the feed will handle showing login prompts when needed
