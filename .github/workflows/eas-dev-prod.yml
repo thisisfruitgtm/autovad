@@ -25,13 +25,13 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: EAS OTA Update
-        run: eas update --branch ${{ github.ref_name }} --non-interactive --message "OTA update (${{ github.ref_name }}): ${{ github.sha }}"
+        run: eas update --branch "${{ github.ref_name }}" --non-interactive --message "OTA update on ${{ github.ref_name }}"
 
-      - name: EAS Build (Android)
+      - name: EAS Build Android
         if: github.ref_name == 'main'
         run: eas build --platform android --non-interactive --profile production
 
-      - name: EAS Build (iOS)
+      - name: EAS Build iOS
         if: github.ref_name == 'main'
         run: eas build --platform ios --non-interactive --profile production
 
@@ -47,7 +47,4 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Promote dev to main
-        run: |
-          FROM_BRANCH="${{ github.event.inputs.promote_from_branch }}"
-          echo "Promoting from $FROM_BRANCH to main..."
-          eas update:promote --from-branch "$FROM_BRANCH" --to-branch main --non-interactive --message "Promote $FROM_BRANCH to main: ${{ github.sha }}" 
+        run: eas update:promote --from-branch "${{ github.event.inputs.promote_from_branch }}" --to-branch main --non-interactive --message "Promote to main" 
