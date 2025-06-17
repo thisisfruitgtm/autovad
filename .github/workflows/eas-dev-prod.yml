@@ -24,7 +24,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: EAS OTA Update (${{ github.ref_name }})
+      - name: EAS OTA Update
         run: eas update --branch ${{ github.ref_name }} --non-interactive --message "OTA update (${{ github.ref_name }}): ${{ github.sha }}"
 
       - name: EAS Build (Android)
