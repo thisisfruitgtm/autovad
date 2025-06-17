@@ -11,8 +11,8 @@ https://autovad.app
 
 ### Redirect URLs:
 ```
-# Development (Expo Go - with wildcard for IP/port variations)
-exp://**
+# Development (Expo Go - Fixed URL)
+exp://localhost/--/auth/callback
 
 # Production (Custom Scheme)
 autovad://auth/callback
@@ -39,8 +39,8 @@ exp://localhost:8082
 ## 3. Testare în Development
 
 1. Rulează `npx expo start`
-2. URL-ul de redirect va fi automat: `exp://[IP]:[PORT]/--/auth/callback`
-3. Wildcard-ul `exp://**` va acoperi toate variațiile!
+2. URL-ul de redirect va fi fix: `exp://localhost/--/auth/callback`
+3. Nu mai depinde de IP sau port - același URL mereu!
 
 ## 4. Environment Variables
 

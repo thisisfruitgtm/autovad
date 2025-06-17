@@ -69,10 +69,8 @@ export function useAuth() {
       let redirectTo: string;
       
       if (__DEV__) {
-        // For development, let Expo Go decide the full URL structure (includes --)
-        redirectTo = makeRedirectUri({
-          path: 'auth/callback'
-        });
+        // For development, use a fixed scheme that doesn't depend on IP
+        redirectTo = 'exp://localhost/--/auth/callback';
       } else {
         // For production, use the custom scheme
         redirectTo = makeRedirectUri({ 
