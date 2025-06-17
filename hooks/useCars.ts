@@ -47,6 +47,25 @@ export function useCars() {
 
       console.log(`💖 useCars: Toggling like for car ${carId}, current state: ${car.is_liked}`);
 
+      // Ensure user exists in users table (fallback safety check)
+      const { error: userError } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email || 'unknown@autovad.com',
+          name: user.user_metadata?.full_name || user.user_metadata?.name || 'User',
+          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'id',
+          ignoreDuplicates: false
+        });
+
+      if (userError) {
+        console.warn('⚠️ useCars: Could not ensure user exists:', userError);
+        // Continue anyway, the trigger should handle this
+      }
+
       if (car.is_liked) {
         // Unlike - delete the like
         const { error } = await supabase
