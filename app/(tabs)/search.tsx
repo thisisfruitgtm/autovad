@@ -79,15 +79,18 @@ function SearchScreen() {
     }).format(price);
   };
 
-  const fetchCars = useCallback(async (isInitial = false) => {
+  // Remove useCallback to prevent dependency issues - just use regular function
+  const fetchCars = async (isInitial = false) => {
     try {
+      console.log(`🚗 SearchScreen: Fetching cars (initial: ${isInitial})...`);
+      
       if (isInitial) {
         setInitialLoading(true);
       } else {
         setFiltering(true);
       }
       
-      // Build query based on filters
+      // Build query based on current filters state
       let query = supabase
         .from('cars')
         .select(`
@@ -140,6 +143,8 @@ function SearchScreen() {
 
       if (error) throw error;
 
+      console.log(`✅ SearchScreen: Fetched ${data.length} cars`);
+
       // Transform data and check if user liked each car
       const transformedCars: Car[] = data.map((car: any) => ({
         id: car.id,
@@ -177,13 +182,14 @@ function SearchScreen() {
 
       setCars(transformedCars);
     } catch (error) {
-      console.error('Error fetching cars:', error);
+      console.error('❌ SearchScreen: Error fetching cars:', error);
+      setCars([]); // Set empty array on error
     } finally {
       setInitialLoading(false);
       setFiltering(false);
       setRefreshing(false);
     }
-  }, [filters, user]); // Remove filterData dependency
+  };
 
   const fetchFilterData = useCallback(async () => {
     try {
@@ -277,26 +283,51 @@ function SearchScreen() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchCars(false);
-  }, [fetchCars]);
+  }, []); // No dependencies needed
 
+  // Track if initial load has been completed
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+  
+  // Separate state for tracking filter changes to prevent loops
+  const [isFirstRender, setIsFirstRender] = useState(true);
+
+  // Initial load only - no dependencies to prevent loops
   useEffect(() => {
-    // Only fetch filter data once on mount
-    fetchFilterData();
-    // Also fetch initial cars
-    fetchCars(true);
-  }, []);
+    const loadInitialData = async () => {
+      console.log('🔄 SearchScreen: Loading initial data...');
+      try {
+        await fetchFilterData();
+        await fetchCars(true);
+        setHasInitiallyLoaded(true);
+        setIsFirstRender(false);
+        console.log('✅ SearchScreen: Initial data loaded');
+      } catch (error) {
+        console.error('❌ SearchScreen: Error loading initial data:', error);
+        setInitialLoading(false);
+      }
+    };
+    
+    loadInitialData();
+  }, []); // No dependencies - only run once
 
+  // Filter changes - only after initial load, with debouncing
   useEffect(() => {
-    // Skip initial render and only filter when filter data is loaded
-    if (filterData.makes.length > 1) {
-      // Debounce filter changes to avoid excessive API calls
-      const timeoutId = setTimeout(() => {
-        fetchCars(false);
-      }, 300); // 300ms debounce
-
-      return () => clearTimeout(timeoutId);
+    // Skip first render and only run after initial load
+    if (isFirstRender || !hasInitiallyLoaded) {
+      return;
     }
-  }, [filters, user, fetchCars]); // Add fetchCars to dependencies
+
+    console.log('🔍 SearchScreen: Filters changed, applying...', filters);
+    
+    // Debounce filter changes
+    const timeoutId = setTimeout(() => {
+      fetchCars(false);
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [filters.searchQuery, filters.selectedMake, filters.selectedPriceRange, filters.selectedFuelType, filters.selectedLocation]); // Explicit filter dependencies
 
   const filteredCars = useMemo(() => {
     return cars; // Filtering is done on the server side
@@ -440,44 +471,66 @@ function SearchScreen() {
           <Text style={styles.resultsTitle}>
             {filteredCars.length} Mașini Găsite
           </Text>
-          
-          <View style={styles.carGrid}>
-            {filteredCars.map((car) => (
+          {filteredCars.length === 0 && !filtering && hasInitiallyLoaded ? (
+            <View style={styles.emptyResults}>
+              <Text style={styles.emptyResultsTitle}>Nu am găsit mașini</Text>
+              <Text style={styles.emptyResultsSubtitle}>
+                Încearcă să modifici filtrele pentru mai multe rezultate
+              </Text>
               <TouchableOpacity 
-                key={car.id} 
-                style={styles.carCard}
-                onPress={() => handleCarPress(car.id)}
+                style={styles.clearFiltersButton}
+                onPress={() => {
+                  setFilters({
+                    searchQuery: '',
+                    selectedMake: 'All',
+                    selectedPriceRange: 'All',
+                    selectedFuelType: 'All',
+                    selectedLocation: 'All',
+                  });
+                }}
               >
-                <Image source={{ uri: car.images[0] }} style={styles.carImage} />
-                <TouchableOpacity 
-                  style={styles.heartButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleLike(car.id);
-                  }}
-                >
-                  <Heart 
-                    size={20} 
-                    color={car.is_liked ? '#F97316' : '#fff'} 
-                    fill={car.is_liked ? '#F97316' : 'none'}
-                  />
-                </TouchableOpacity>
-                <View style={styles.carInfo}>
-                  <Text style={styles.carTitle}>{car.make} {car.model}</Text>
-                  <Text style={styles.carYear}>{car.year}</Text>
-                  <Text style={styles.carPrice}>{formatPrice(car.price)}</Text>
-                  <View style={styles.carLocation}>
-                    <MapPin size={14} color="#666" />
-                    <Text style={styles.locationText}>{car.location}</Text>
-                  </View>
-                  <View style={styles.carStats}>
-                    <Text style={styles.statsText}>{car.likes_count} likes</Text>
-                    <Text style={styles.statsText}>{car.fuel_type}</Text>
-                  </View>
-                </View>
+                <Text style={styles.clearFiltersText}>Șterge Filtrele</Text>
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          ) : (
+            <View style={styles.carGrid}>
+              {filteredCars.map((car) => (
+                <TouchableOpacity 
+                  key={car.id} 
+                  style={styles.carCard}
+                  onPress={() => handleCarPress(car.id)}
+                >
+                  <Image source={{ uri: car.images[0] }} style={styles.carImage} />
+                  <TouchableOpacity 
+                    style={styles.heartButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleLike(car.id);
+                    }}
+                  >
+                    <Heart 
+                      size={20} 
+                      color={car.is_liked ? '#F97316' : '#fff'} 
+                      fill={car.is_liked ? '#F97316' : 'none'}
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.carInfo}>
+                    <Text style={styles.carTitle}>{car.make} {car.model}</Text>
+                    <Text style={styles.carYear}>{car.year}</Text>
+                    <Text style={styles.carPrice}>{formatPrice(car.price)}</Text>
+                    <View style={styles.carLocation}>
+                      <MapPin size={14} color="#666" />
+                      <Text style={styles.locationText}>{car.location}</Text>
+                    </View>
+                    <View style={styles.carStats}>
+                      <Text style={styles.statsText}>{car.likes_count} likes</Text>
+                      <Text style={styles.statsText}>{car.fuel_type}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -658,5 +711,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#666',
+  },
+  emptyResults: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyResultsTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  emptyResultsSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  clearFiltersButton: {
+    backgroundColor: '#F97316',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  clearFiltersText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000',
   },
 });
