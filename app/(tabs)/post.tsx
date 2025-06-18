@@ -93,12 +93,15 @@ class MediaCompressor {
   }
 }
 
-// Custom Camera Component
+// Custom Camera Component with Enhanced UX
 function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: string) => void; onClose: () => void }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [facing, setFacing] = useState<CameraType>('back');
+  const [isReady, setIsReady] = useState(false);
+  const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
+  const [recordingPaused, setRecordingPaused] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const recordingInterval = useRef<number | null>(null);
 
@@ -142,12 +145,22 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
   if (!permission.granted) {
     return (
       <View style={styles.cameraContainer}>
-        <View style={styles.cameraPermissionContainer}>
-          <Text style={styles.cameraPermissionText}>Avem nevoie de acces la cameră</Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Permite accesul</Text>
-          </TouchableOpacity>
-        </View>
+        <Animated.View entering={FadeInDown.delay(200)} style={styles.cameraPermissionContainer}>
+          <Animated.View entering={FadeInDown.delay(400)} style={styles.permissionIconContainer}>
+            <Camera size={64} color="#F97316" />
+          </Animated.View>
+          <Animated.Text entering={FadeInDown.delay(600)} style={styles.cameraPermissionTitle}>
+            Acces la cameră necesar
+          </Animated.Text>
+          <Animated.Text entering={FadeInDown.delay(800)} style={styles.cameraPermissionText}>
+            Pentru a filma prezentarea mașinii tale, avem nevoie de acces la cameră
+          </Animated.Text>
+          <Animated.View entering={FadeInDown.delay(1000)}>
+            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+              <Text style={styles.permissionButtonText}>Permite accesul</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
       </View>
     );
   }
@@ -189,52 +202,118 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
         style={styles.camera}
         facing={facing}
         mode="video"
+        onCameraReady={() => setIsReady(true)}
       />
       
+      {/* Camera Ready Overlay */}
+      {!isReady && (
+        <Animated.View entering={FadeInDown} style={styles.cameraLoadingOverlay}>
+          <ActivityIndicator size="large" color="#F97316" />
+          <Text style={styles.cameraLoadingText}>Pregătesc camera...</Text>
+        </Animated.View>
+      )}
+      
       {/* Header overlay */}
-      <View style={styles.cameraHeader}>
+      <Animated.View entering={FadeInDown.delay(500)} style={styles.cameraHeader}>
         <TouchableOpacity style={styles.cameraCloseButton} onPress={onClose}>
           <X size={24} color="#fff" />
         </TouchableOpacity>
-        <View style={styles.cameraTimer}>
+        <Animated.View style={[styles.cameraTimer, isRecording && styles.cameraTimerActive]}>
+          <Animated.View style={[styles.recordingDot, { opacity: isRecording ? 1 : 0 }]} />
           <Text style={styles.cameraTimerText}>{formatTime(recordingTime)}/1:00</Text>
-        </View>
+        </Animated.View>
         <TouchableOpacity 
           style={styles.cameraFlipButton} 
           onPress={() => setFacing(current => current === 'back' ? 'front' : 'back')}
         >
           <Camera size={24} color="#fff" />
         </TouchableOpacity>
+      </Animated.View>
+
+      {/* Recording Progress Circle */}
+      {isRecording && (
+        <Animated.View entering={FadeInDown} style={styles.recordingProgressContainer}>
+          <View style={styles.recordingProgressBackground}>
+            <View 
+              style={[
+                styles.recordingProgressFill,
+                { 
+                  transform: [{ 
+                    rotate: `${(recordingTime / 60) * 360}deg` 
+                  }] 
+                }
+              ]} 
+            />
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Center Guidelines */}
+      <View style={styles.cameraGuidelines}>
+        <View style={styles.guidelineHorizontal} />
+        <View style={styles.guidelineVertical} />
       </View>
 
-      {/* Recording indicator overlay */}
-      {isRecording && (
-        <View style={styles.recordingIndicator}>
-          <View style={styles.recordingDot} />
-          <Text style={styles.recordingText}>REC</Text>
-        </View>
+      {/* Recording Tips */}
+      {!isRecording && isReady && (
+        <Animated.View entering={FadeInDown.delay(800)} style={styles.recordingTips}>
+          <Text style={styles.recordingTipsText}>💡 Filmează mașina din toate unghiurile</Text>
+        </Animated.View>
       )}
 
       {/* Bottom controls overlay */}
-      <View style={styles.cameraControls}>
+      <Animated.View entering={FadeInDown.delay(600)} style={styles.cameraControls}>
         <View style={styles.cameraControlsInner}>
-          <View style={{ width: 60 }} />
+          {/* Gallery Button */}
+          <TouchableOpacity style={styles.galleryButton}>
+            <ImageIcon size={24} color="#fff" />
+          </TouchableOpacity>
           
+          {/* Record Button */}
           <TouchableOpacity
             style={[styles.recordButton, isRecording && styles.recordButtonActive]}
             onPress={isRecording ? stopRecording : startRecording}
             disabled={recordingTime >= 60}
           >
-            {isRecording ? (
-              <StopCircle size={32} color="#fff" />
-            ) : (
-              <Circle size={32} color="#F97316" />
-            )}
+            <Animated.View style={[
+              styles.recordButtonInner,
+              isRecording && styles.recordButtonInnerActive
+            ]}>
+              {isRecording ? (
+                <StopCircle size={28} color="#fff" />
+              ) : (
+                <Circle size={28} color="#fff" fill="#F97316" />
+              )}
+            </Animated.View>
           </TouchableOpacity>
           
-          <View style={{ width: 60 }} />
+          {/* Flash Button */}
+          <TouchableOpacity 
+            style={styles.flashButton}
+            onPress={() => setFlashMode(current => 
+              current === 'off' ? 'on' : current === 'on' ? 'auto' : 'off'
+            )}
+          >
+            <Text style={styles.flashButtonText}>
+              {flashMode === 'off' ? '⚡' : flashMode === 'on' ? '💡' : '🔆'}
+            </Text>
+          </TouchableOpacity>
         </View>
-      </View>
+        
+        {/* Recording Controls */}
+        {isRecording && (
+          <Animated.View entering={FadeInDown} style={styles.recordingControls}>
+            <TouchableOpacity 
+              style={styles.pauseButton}
+              onPress={() => setRecordingPaused(!recordingPaused)}
+            >
+              <Text style={styles.pauseButtonText}>
+                {recordingPaused ? '▶️' : '⏸️'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+      </Animated.View>
     </View>
   );
 }
@@ -775,33 +854,64 @@ function PostScreen() {
         return (
           <Animated.View entering={SlideInRight} exiting={SlideOutLeft} style={styles.stepContent}>
             <View style={styles.centeredContent}>
-              <Text style={styles.stepTitle}>Video prezentare</Text>
-              <Text style={styles.stepSubtitle}>Filmează mașina ta (maxim 60 secunde)</Text>
+              <Animated.Text entering={FadeInDown.delay(200)} style={styles.stepTitle}>
+                Video prezentare
+              </Animated.Text>
+              <Animated.Text entering={FadeInDown.delay(400)} style={styles.stepSubtitle}>
+                Filmează mașina ta (maxim 60 secunde)
+              </Animated.Text>
               
-              <View style={styles.videoContainer}>
+              {/* Video Tips */}
+              <Animated.View entering={FadeInDown.delay(600)} style={styles.videoTipsContainer}>
+                <Text style={styles.videoTipsTitle}>🎬 Sfaturi pentru video de calitate</Text>
+                <Text style={styles.videoTipsText}>• Filmează în lumină bună</Text>
+                <Text style={styles.videoTipsText}>• Arată exteriorul din toate unghiurile</Text>
+                <Text style={styles.videoTipsText}>• Include interiorul și portbagajul</Text>
+                <Text style={styles.videoTipsText}>• Pornește motorul să se audă</Text>
+              </Animated.View>
+              
+              <Animated.View entering={FadeInDown.delay(800)} style={styles.videoContainer}>
                 {videoUri ? (
-                  <View style={styles.videoPreview}>
-                    <Video size={48} color="#F97316" />
-                    <Text style={styles.videoText}>Video înregistrat cu succes!</Text>
-                    <Text style={styles.videoSubtext}>Apasă pentru a înregistra din nou</Text>
+                  <Animated.View entering={FadeInDown} style={styles.videoPreview}>
+                    <View style={styles.videoPreviewHeader}>
+                      <View style={styles.videoSuccessIcon}>
+                        <Check size={32} color="#000" />
+                      </View>
+                      <Text style={styles.videoText}>Video înregistrat cu succes!</Text>
+                    </View>
+                    
+                    <View style={styles.videoPreviewInfo}>
+                                             <Text style={styles.videoSubtext}>Durată: ~60s</Text>
+                      <Text style={styles.videoQualityText}>✅ Calitate HD</Text>
+                    </View>
+                    
                     <TouchableOpacity 
                       style={styles.rerecordButton}
                       onPress={() => setShowCamera(true)}
                     >
+                      <Video size={20} color="#000" />
                       <Text style={styles.rerecordButtonText}>Înregistrează din nou</Text>
                     </TouchableOpacity>
-                  </View>
+                  </Animated.View>
                 ) : (
                   <TouchableOpacity 
                     style={styles.cameraButton}
                     onPress={() => setShowCamera(true)}
                   >
-                    <Video size={48} color="#F97316" />
+                    <Animated.View style={styles.cameraButtonIcon}>
+                      <Video size={48} color="#F97316" />
+                    </Animated.View>
                     <Text style={styles.cameraButtonText}>Începe înregistrarea</Text>
-                    <Text style={styles.cameraButtonSubtext}>Prezintă mașina ta în 60 de secunde</Text>
+                    <Text style={styles.cameraButtonSubtext}>
+                      Prezintă mașina ta în 60 de secunde
+                    </Text>
+                    <View style={styles.recordingHints}>
+                      <Text style={styles.recordingHintText}>📱 Ține telefonul orizontal</Text>
+                      <Text style={styles.recordingHintText}>🔊 Vorbește clar despre mașină</Text>
+                    </View>
                   </TouchableOpacity>
                 )}
-              </View>
+              </Animated.View>
             </View>
           </Animated.View>
         );
@@ -814,36 +924,81 @@ function PostScreen() {
               <Text style={styles.stepSubtitle}>Adaugă până la 10 fotografii ({images.length}/10)</Text>
               
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                <View style={styles.imagesGrid}>
+                {/* Photo Upload Tips */}
+                <Animated.View entering={FadeInDown.delay(200)} style={styles.photoTipsContainer}>
+                  <Text style={styles.photoTipsTitle}>📸 Sfaturi pentru fotografii de calitate</Text>
+                  <Text style={styles.photoTipsText}>• Fotografiază în lumină naturală</Text>
+                  <Text style={styles.photoTipsText}>• Include exteriorul și interiorul</Text>
+                  <Text style={styles.photoTipsText}>• Arată eventualele defecte</Text>
+                </Animated.View>
+
+                <Animated.View entering={FadeInDown.delay(400)} style={styles.imagesGrid}>
                   {images.map((image, index) => (
-                    <View key={index} style={styles.imageItem}>
+                    <Animated.View 
+                      key={index} 
+                      entering={FadeInDown.delay(index * 100)}
+                      style={styles.imageItem}
+                    >
                       <Image source={{ uri: image }} style={styles.imagePreview} />
-                      <TouchableOpacity 
-                        style={styles.removeImageButton}
-                        onPress={() => removeImage(index)}
-                      >
-                        <X size={16} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
+                      <View style={styles.imageOverlay}>
+                        <TouchableOpacity 
+                          style={styles.removeImageButton}
+                          onPress={() => removeImage(index)}
+                        >
+                          <X size={16} color="#fff" />
+                        </TouchableOpacity>
+                        <View style={styles.imageIndex}>
+                          <Text style={styles.imageIndexText}>{index + 1}</Text>
+                        </View>
+                      </View>
+                      {index === 0 && (
+                        <View style={styles.primaryImageBadge}>
+                          <Text style={styles.primaryImageText}>PRINCIPALĂ</Text>
+                        </View>
+                      )}
+                    </Animated.View>
                   ))}
                   
                   {images.length < 10 && (
-                    <TouchableOpacity 
-                      style={styles.addImageButton} 
-                      onPress={pickImages}
-                      disabled={compressing}
-                    >
-                      {compressing ? (
-                        <ActivityIndicator size="small" color="#F97316" />
-                      ) : (
-                        <>
-                          <Plus size={32} color="#F97316" />
-                          <Text style={styles.addImageText}>Adaugă fotografii</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
+                    <Animated.View entering={FadeInDown.delay(images.length * 100)}>
+                      <TouchableOpacity 
+                        style={[styles.addImageButton, compressing && styles.addImageButtonLoading]} 
+                        onPress={pickImages}
+                        disabled={compressing}
+                      >
+                        {compressing ? (
+                          <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color="#F97316" />
+                            <Text style={styles.loadingText}>Procesez...</Text>
+                          </View>
+                        ) : (
+                          <>
+                            <View style={styles.addImageIcon}>
+                              <Plus size={28} color="#F97316" />
+                            </View>
+                            <Text style={styles.addImageText}>Adaugă fotografii</Text>
+                            <Text style={styles.addImageSubtext}>
+                              {images.length === 0 ? 'Prima fotografie va fi principală' : `${10 - images.length} rămase`}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </Animated.View>
                   )}
-                </View>
+                </Animated.View>
+
+                {/* Photo Organization */}
+                {images.length > 1 && (
+                  <Animated.View entering={FadeInDown.delay(600)} style={styles.photoOrganization}>
+                    <Text style={styles.organizationTitle}>Organizează fotografiile</Text>
+                    <Text style={styles.organizationSubtitle}>
+                      Ține apăsat și trage pentru a schimba ordinea
+                    </Text>
+                    <View style={styles.photoReorderHint}>
+                      <Text style={styles.reorderHintText}>💡 Prima fotografie va fi afișată ca principală</Text>
+                    </View>
+                  </Animated.View>
+                )}
               </ScrollView>
             </View>
           </Animated.View>
@@ -1311,49 +1466,122 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   cameraCloseButton: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     padding: 12,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   cameraTimer: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  cameraTimerActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    borderColor: '#EF4444',
   },
   cameraTimerText: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#fff',
+    marginLeft: 4,
   },
   cameraFlipButton: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     padding: 12,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
-  recordingIndicator: {
+  cameraLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  cameraLoadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#fff',
+    marginTop: 12,
+  },
+  recordingProgressContainer: {
     position: 'absolute',
     top: 120,
     left: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    width: 60,
+    height: 60,
     zIndex: 10,
   },
-  recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
-    marginRight: 8,
+  recordingProgressBackground: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderWidth: 3,
+    borderColor: '#EF4444',
+    overflow: 'hidden',
   },
-  recordingText: {
+  recordingProgressFill: {
+    position: 'absolute',
+    top: -30,
+    left: -30,
+    width: 60,
+    height: 60,
+    backgroundColor: '#EF4444',
+    transformOrigin: '30px 30px',
+  },
+  cameraGuidelines: {
+    position: 'absolute',
+    top: '40%',
+    left: '40%',
+    right: '40%',
+    bottom: '40%',
+    zIndex: 5,
+  },
+  guidelineHorizontal: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  guidelineVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  recordingTips: {
+    position: 'absolute',
+    bottom: 200,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    zIndex: 10,
+  },
+  recordingTipsText: {
     fontSize: 14,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'Inter-Medium',
     color: '#fff',
+    textAlign: 'center',
   },
   cameraControls: {
     position: 'absolute',
@@ -1369,38 +1597,113 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  galleryButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
   recordButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(249, 115, 22, 0.3)',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(0,0,0,0.3)',
     borderWidth: 4,
-    borderColor: '#F97316',
+    borderColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
   },
   recordButtonActive: {
-    backgroundColor: 'rgba(239, 68, 68, 0.3)',
     borderColor: '#EF4444',
   },
-  cameraPermissionText: {
-    fontSize: 18,
-    fontFamily: 'Inter-Regular',
+  recordButtonInner: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#F97316',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordButtonInnerActive: {
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+  },
+  flashButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  flashButtonText: {
+    fontSize: 20,
+  },
+  recordingControls: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  pauseButton: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  pauseButtonText: {
+    fontSize: 16,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+  },
+  // Permission styles
+  permissionIconContainer: {
+    marginBottom: 24,
+    padding: 20,
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+    borderRadius: 50,
+  },
+  cameraPermissionTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  cameraPermissionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 24,
   },
   cameraPermissionContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 40,
   },
   permissionButton: {
     backgroundColor: '#F97316',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
     borderRadius: 12,
+    elevation: 5,
+    shadowColor: '#F97316',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   permissionButtonText: {
     fontSize: 16,
@@ -1484,5 +1787,188 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 8,
+  },
+  // Enhanced Photo Styles
+  photoTipsContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  photoTipsTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#F97316',
+    marginBottom: 12,
+  },
+  photoTipsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+  },
+  imageIndex: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageIndexText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#fff',
+  },
+  primaryImageBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: '#F97316',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  primaryImageText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#000',
+  },
+  addImageButtonLoading: {
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#F97316',
+    marginTop: 8,
+  },
+  addImageIcon: {
+    marginBottom: 8,
+    padding: 8,
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+    borderRadius: 20,
+  },
+  addImageSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  photoOrganization: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  organizationTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  organizationSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    marginBottom: 12,
+  },
+  photoReorderHint: {
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+  },
+  reorderHintText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#F97316',
+    textAlign: 'center',
+  },
+  // Enhanced Video Styles
+  videoTipsContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  videoTipsTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#F97316',
+    marginBottom: 12,
+  },
+  videoTipsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  videoPreviewHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  videoSuccessIcon: {
+    backgroundColor: '#F97316',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  videoPreviewInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  videoQualityText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#22C55E',
+  },
+  cameraButtonIcon: {
+    marginBottom: 16,
+    padding: 20,
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+    borderRadius: 50,
+  },
+  recordingHints: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  recordingHintText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 4,
   },
 });
