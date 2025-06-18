@@ -36,6 +36,7 @@ const mockCars: Car[] = [
       verified: true,
     },
     created_at: new Date().toISOString(),
+    status: 'active' as const,
     is_liked: false,
     likes_count: 12,
     comments_count: 3,
@@ -63,6 +64,7 @@ const mockCars: Car[] = [
       verified: true,
     },
     created_at: new Date().toISOString(),
+    status: 'active' as const,
     is_liked: false,
     likes_count: 28,
     comments_count: 7,
@@ -90,6 +92,7 @@ const mockCars: Car[] = [
       verified: true,
     },
     created_at: new Date().toISOString(),
+    status: 'active' as const,
     is_liked: false,
     likes_count: 35,
     comments_count: 12,
@@ -141,44 +144,105 @@ export class CarService {
     }));
   }
 
-  static async getCars(userId?: string): Promise<Car[]> {
-    console.log('🚗 CarService: Starting to fetch cars...');
+  static async getUserCars(userId: string): Promise<Car[]> {
+    console.log('🚗 CarService: Starting to fetch user cars...');
     
-    // Check if environment variables are available
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.warn('⚠️ CarService: Environment variables not available, using mock data');
-      return this.getEnhancedMockCars();
-    }
+    // Import supabase client directly
+    const { supabase } = await import('@/lib/supabase');
     
     try {
-      // Enhanced query to include likes information for authenticated users
-      let url = `${SUPABASE_URL}/rest/v1/cars?select=*&status=eq.active&order=created_at.desc&limit=20`;
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-      
-      const response = await this.fetchWithRetry(url, { 
-        method: 'GET',
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const { data, error } = await supabase
+        .from('cars')
+        .select('*')
+        .eq('seller_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
       }
+
+      console.log(`✅ CarService: Successfully fetched ${data.length} user cars`);
       
-      const data = await response.json();
+      // Transform data to match Car interface
+      const transformedCars: Car[] = data.map((car: any) => ({
+        id: car.id,
+        make: car.make,
+        model: car.model,
+        year: car.year,
+        price: car.price,
+        mileage: car.mileage,
+        color: car.color,
+        fuel_type: car.fuel_type,
+        transmission: car.transmission,
+        body_type: car.body_type,
+        videos: car.videos || [],
+        images: car.images || [],
+        description: car.description,
+        location: car.location,
+        status: car.status || 'active',
+        seller: {
+          id: userId,
+          name: 'Tine',
+          avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
+          rating: 5.0,
+          verified: true,
+        },
+        created_at: car.created_at,
+        is_liked: false,
+        likes_count: car.likes_count || 0,
+        comments_count: car.comments_count || 0,
+      }));
+
+      return transformedCars;
+      
+    } catch (error) {
+      console.error('❌ CarService: Failed to fetch user cars:', error);
+      return [];
+    }
+  }
+
+  static async getCars(userId?: string): Promise<Car[]> {
+    console.log('🚗 CarService: Starting to fetch cars...');
+    console.log('👤 CarService: User ID provided:', userId ? 'Yes' : 'No (unauthenticated)');
+    
+    // Import supabase client directly to avoid REST API caching issues
+    const { supabase } = await import('@/lib/supabase');
+    
+    try {
+      // Use Supabase client instead of REST API to avoid caching issues
+      // Fetch ALL active cars regardless of authentication status
+      const { data, error } = await supabase
+        .from('cars')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(100); // Increased limit to show more cars
+
+      if (error) {
+        throw error;
+      }
+
       console.log(`✅ CarService: Successfully fetched ${data.length} cars from database`);
+      
+      // Debug: Log the latest cars to see what's being fetched
+      if (data.length > 0) {
+        console.log('🔍 CarService: Latest 3 cars:');
+        data.slice(0, 3).forEach((car: any, index: number) => {
+          console.log(`  ${index + 1}. ${car.make} ${car.model} (${car.created_at}) - Status: ${car.status}`);
+        });
+      }
       
       // Fetch likes for the user if authenticated
       let userLikes: string[] = [];
       if (userId) {
         try {
-          const likesUrl = `${SUPABASE_URL}/rest/v1/likes?select=car_id&user_id=eq.${userId}`;
-          const likesResponse = await this.fetchWithRetry(likesUrl, { method: 'GET' });
-          if (likesResponse.ok) {
-            const likesData = await likesResponse.json();
+          const { data: likesData, error: likesError } = await supabase
+            .from('likes')
+            .select('car_id')
+            .eq('user_id', userId);
+            
+          if (!likesError && likesData) {
             userLikes = likesData.map((like: any) => like.car_id);
             console.log(`✅ CarService: Fetched ${userLikes.length} user likes`);
           }
@@ -203,6 +267,7 @@ export class CarService {
         images: car.images || [],
         description: car.description,
         location: car.location,
+        status: car.status || 'active',
         seller: {
           id: 'autovad-verified',
           name: 'Autovad Verified',

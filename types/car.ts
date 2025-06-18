@@ -13,6 +13,7 @@ export interface Car {
   images: string[];
   description: string;
   location: string;
+  status: 'active' | 'inactive' | 'sold';
   seller?: {
     id: string;
     name: string;

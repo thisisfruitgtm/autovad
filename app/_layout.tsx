@@ -64,7 +64,7 @@ export default function RootLayout() {
     } else if (!hasCompletedOnboarding && !inOnboardingGroup) {
       // User hasn't completed onboarding - start onboarding flow
       console.log('[Layout] Redirecting new user to onboarding');
-      router.replace('/(onboarding)/intro');
+        router.replace('/(onboarding)/intro');
     }
     
     // Allow unauthenticated users to access auth screens even after onboarding

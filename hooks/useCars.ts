@@ -38,7 +38,7 @@ export function useCars() {
 
   // Listen for like state changes from other components
   useEffect(() => {
-    const subscription = DeviceEventEmitter.addListener('likeStateChanged', ({ carId, isLiked }) => {
+    const likeSubscription = DeviceEventEmitter.addListener('likeStateChanged', ({ carId, isLiked }) => {
       console.log('🔔 useCars: Like state change event received:', { carId, isLiked });
       setCars(prevCars =>
         prevCars.map(c =>
@@ -53,21 +53,27 @@ export function useCars() {
       );
     });
 
+    // Listen for new car posts to refresh the feed
+    const carPostedSubscription = DeviceEventEmitter.addListener('carPosted', ({ carId }) => {
+      console.log('🔔 useCars: New car posted event received:', { carId });
+      console.log('🔄 useCars: Refreshing cars list...');
+      fetchCars();
+    });
+
     return () => {
-      subscription.remove();
+      likeSubscription.remove();
+      carPostedSubscription.remove();
     };
   }, []);
 
-  // Real-time subscription to likes changes
+  // Real-time subscription to likes changes and new cars
   useEffect(() => {
-    if (!user) return;
-
-    console.log('🔄 useCars: Setting up real-time likes subscription');
+    console.log('🔄 useCars: Setting up real-time subscriptions');
 
     // Create a unique channel name to avoid conflicts
-    const channelName = `likes_changes_${user.id}_${Date.now()}`;
+    const channelName = `realtime_changes_${Date.now()}`;
     
-    const likesSubscription = supabase
+    const realtimeSubscription = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
@@ -75,7 +81,7 @@ export function useCars() {
           event: '*',
           schema: 'public',
           table: 'likes',
-          filter: `user_id=eq.${user.id}`,
+          filter: user ? `user_id=eq.${user.id}` : undefined,
         },
         (payload) => {
           console.log('🔔 useCars: Likes change detected:', payload);
@@ -111,13 +117,26 @@ export function useCars() {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'cars',
+        },
+        (payload) => {
+          console.log('🔔 useCars: New car detected:', payload);
+          console.log('🔄 useCars: Refreshing cars list due to new car...');
+          fetchCars();
+        }
+      )
       .subscribe((status) => {
         console.log('🔄 useCars: Subscription status:', status);
       });
 
     return () => {
-      console.log('🔄 useCars: Cleaning up likes subscription');
-      likesSubscription.unsubscribe();
+      console.log('🔄 useCars: Cleaning up real-time subscriptions');
+      realtimeSubscription.unsubscribe();
     };
   }, [user?.id]); // Only depend on user.id to avoid unnecessary re-subscriptions
 
