@@ -1,97 +1,66 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   TextInput,
+  TouchableOpacity,
+  FlatList,
   Image,
+  StyleSheet,
+  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Filter, MapPin, Heart } from 'lucide-react-native';
-import { router, useFocusEffect } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { Car } from '@/types/car';
-import { useAuth } from '@/hooks/useAuth';
+import { Search, Filter, Heart, MapPin } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
+import { Car } from '../../types/car';
 
-interface FilterData {
+interface FilterOptions {
   makes: string[];
-  priceRanges: { label: string; min: number; max: number | null }[];
   fuelTypes: string[];
+  bodyTypes: string[];
   locations: string[];
+  priceRanges: { label: string; min: number; max: number | null }[];
 }
 
-interface SearchFilters {
-  searchQuery: string;
-  selectedMake: string;
-  selectedPriceRange: string;
-  selectedFuelType: string;
-  selectedLocation: string;
-}
-
-function SearchScreen() {
+export default function SearchScreen() {
   const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
   const [cars, setCars] = useState<Car[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [filtering, setFiltering] = useState(false);
+  const [filteredCars, setFilteredCars] = useState<Car[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filters, setFilters] = useState<SearchFilters>({
-    searchQuery: '',
-    selectedMake: 'All',
-    selectedPriceRange: 'All',
-    selectedFuelType: 'All',
-    selectedLocation: 'All',
-  });
-  const [filterData, setFilterData] = useState<FilterData>({
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Filter states
+  const [selectedMake, setSelectedMake] = useState<string>('All');
+  const [selectedFuelType, setSelectedFuelType] = useState<string>('All');
+  const [selectedBodyType, setSelectedBodyType] = useState<string>('All');
+  const [selectedLocation, setSelectedLocation] = useState<string>('All');
+  const [selectedPriceRange, setSelectedPriceRange] = useState<string>('All');
+  
+  // Filter options
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     makes: ['All'],
+    fuelTypes: ['All'],
+    bodyTypes: ['All'],
+    locations: ['All'],
     priceRanges: [
       { label: 'All', min: 0, max: null },
-      { label: '0-50k', min: 0, max: 50000 },
-      { label: '50k-100k', min: 50000, max: 100000 },
-      { label: '100k-200k', min: 100000, max: 200000 },
-      { label: '200k+', min: 200000, max: null },
+      { label: 'Sub 25k', min: 0, max: 25000 },
+      { label: '25k - 50k', min: 25000, max: 50000 },
+      { label: '50k - 100k', min: 50000, max: 100000 },
+      { label: '100k - 200k', min: 100000, max: 200000 },
+      { label: 'Peste 200k', min: 200000, max: null },
     ],
-    fuelTypes: ['All'],
-    locations: ['All'],
   });
 
-  // Optimize tab focus behavior
-  useFocusEffect(
-    useCallback(() => {
-      // Tab became active - refresh data if needed
-      if (cars.length === 0 && !initialLoading && !filtering) {
-        fetchCars(true);
-      }
-      return () => {
-        // Tab lost focus - keep data in memory
-      };
-    }, [cars.length, initialLoading, filtering])
-  );
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('ro-RO', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
-
-  // Remove useCallback to prevent dependency issues - just use regular function
-  const fetchCars = async (isInitial = false) => {
+  // Fetch all cars and generate filter options
+  const fetchCarsAndFilters = async () => {
     try {
-      console.log(`🚗 SearchScreen: Fetching cars (initial: ${isInitial})...`);
-      
-      if (isInitial) {
-        setInitialLoading(true);
-      } else {
-        setFiltering(true);
-      }
-      
-      // Build query based on current filters state
-      let query = supabase
+      const { data, error } = await supabase
         .from('cars')
         .select(`
           *,
@@ -101,51 +70,9 @@ function SearchScreen() {
         .eq('status', 'active')
         .order('created_at', { ascending: false });
 
-      // Apply search filter
-      if (filters.searchQuery.trim()) {
-        query = query.or(`make.ilike.%${filters.searchQuery}%,model.ilike.%${filters.searchQuery}%`);
-      }
-
-      // Apply make filter
-      if (filters.selectedMake !== 'All') {
-        query = query.eq('make', filters.selectedMake);
-      }
-
-      // Apply fuel type filter
-      if (filters.selectedFuelType !== 'All') {
-        query = query.eq('fuel_type', filters.selectedFuelType);
-      }
-
-      // Apply location filter
-      if (filters.selectedLocation !== 'All') {
-        query = query.ilike('location', `%${filters.selectedLocation}%`);
-      }
-
-      // Apply price range filter with static price ranges
-      if (filters.selectedPriceRange !== 'All') {
-        const staticPriceRanges = [
-          { label: 'All', min: 0, max: null },
-          { label: '0-50k', min: 0, max: 50000 },
-          { label: '50k-100k', min: 50000, max: 100000 },
-          { label: '100k-200k', min: 100000, max: 200000 },
-          { label: '200k+', min: 200000, max: null },
-        ];
-        const priceRange = staticPriceRanges.find(r => r.label === filters.selectedPriceRange);
-        if (priceRange) {
-          query = query.gte('price', priceRange.min);
-          if (priceRange.max) {
-            query = query.lte('price', priceRange.max);
-          }
-        }
-      }
-
-      const { data, error } = await query.limit(50);
-
       if (error) throw error;
 
-      console.log(`✅ SearchScreen: Fetched ${data.length} cars`);
-
-      // Transform data and check if user liked each car
+      // Transform data
       const transformedCars: Car[] = data.map((car: any) => ({
         id: car.id,
         make: car.make,
@@ -181,55 +108,80 @@ function SearchScreen() {
       }));
 
       setCars(transformedCars);
+      setFilteredCars(transformedCars);
+
+      // Generate filter options from data
+      const makes = Array.from(new Set(transformedCars.map(car => car.make))).sort();
+      const fuelTypes = Array.from(new Set(transformedCars.map(car => car.fuel_type))).sort();
+      const bodyTypes = Array.from(new Set(transformedCars.map(car => car.body_type))).sort();
+      const locations = Array.from(new Set(transformedCars.map(car => car.location.split(',')[0].trim()))).sort();
+
+      setFilterOptions(prev => ({
+        ...prev,
+        makes: ['All', ...makes],
+        fuelTypes: ['All', ...fuelTypes],
+        bodyTypes: ['All', ...bodyTypes],
+        locations: ['All', ...locations],
+      }));
+
     } catch (error) {
-      console.error('❌ SearchScreen: Error fetching cars:', error);
-      setCars([]); // Set empty array on error
+      console.error('Error fetching cars:', error);
     } finally {
-      setInitialLoading(false);
-      setFiltering(false);
+      setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const fetchFilterData = useCallback(async () => {
-    try {
-      // Fetch unique makes
-      const { data: makesData } = await supabase
-        .from('cars')
-        .select('make')
-        .eq('status', 'active');
-      
-      const uniqueMakes = Array.from(new Set(makesData?.map(c => c.make) || [])).sort();
-      
-      // Fetch unique fuel types
-      const { data: fuelData } = await supabase
-        .from('cars')
-        .select('fuel_type')
-        .eq('status', 'active');
-      
-      const uniqueFuelTypes = Array.from(new Set(fuelData?.map(c => c.fuel_type) || [])).sort();
-      
-      // Fetch unique locations (extract city from location string)
-      const { data: locationData } = await supabase
-        .from('cars')
-        .select('location')
-        .eq('status', 'active');
-      
-      const uniqueLocations = Array.from(new Set(
-        locationData?.map(c => c.location.split(',')[0].trim()) || []
-      )).sort();
+  // Apply filters to cars
+  const applyFilters = () => {
+    let filtered = cars;
 
-      setFilterData(prev => ({
-        ...prev,
-        makes: ['All', ...uniqueMakes],
-        fuelTypes: ['All', ...uniqueFuelTypes],
-        locations: ['All', ...uniqueLocations],
-      }));
-    } catch (error) {
-      console.error('Error fetching filter data:', error);
+    // Search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(car => 
+        car.make.toLowerCase().includes(query) ||
+        car.model.toLowerCase().includes(query) ||
+        `${car.make} ${car.model}`.toLowerCase().includes(query)
+      );
     }
-  }, []);
 
+    // Make filter
+    if (selectedMake !== 'All') {
+      filtered = filtered.filter(car => car.make === selectedMake);
+    }
+
+    // Fuel type filter
+    if (selectedFuelType !== 'All') {
+      filtered = filtered.filter(car => car.fuel_type === selectedFuelType);
+    }
+
+    // Body type filter
+    if (selectedBodyType !== 'All') {
+      filtered = filtered.filter(car => car.body_type === selectedBodyType);
+    }
+
+    // Location filter
+    if (selectedLocation !== 'All') {
+      filtered = filtered.filter(car => car.location.includes(selectedLocation));
+    }
+
+    // Price range filter
+    if (selectedPriceRange !== 'All') {
+      const priceRange = filterOptions.priceRanges.find(range => range.label === selectedPriceRange);
+      if (priceRange) {
+        filtered = filtered.filter(car => {
+          const price = car.price;
+          const inRange = price >= priceRange.min && (priceRange.max === null || price <= priceRange.max);
+          return inRange;
+        });
+      }
+    }
+
+    setFilteredCars(filtered);
+  };
+
+  // Handle like toggle
   const handleLike = async (carId: string) => {
     if (!user) return;
 
@@ -238,123 +190,61 @@ function SearchScreen() {
       if (!car) return;
 
       if (car.is_liked) {
-        // Unlike
-        await supabase
-          .from('likes')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('car_id', carId);
-        
-        // Update likes count
-        await supabase
-          .from('cars')
-          .update({ likes_count: Math.max(0, car.likes_count - 1) })
-          .eq('id', carId);
+        await supabase.from('likes').delete().eq('user_id', user.id).eq('car_id', carId);
       } else {
-        // Like
-        await supabase
-          .from('likes')
-          .insert({ user_id: user.id, car_id: carId });
-        
-        // Update likes count
-        await supabase
-          .from('cars')
-          .update({ likes_count: car.likes_count + 1 })
-          .eq('id', carId);
+        await supabase.from('likes').insert({ user_id: user.id, car_id: carId });
       }
 
       // Update local state
-      setCars(prevCars =>
-        prevCars.map(c =>
-          c.id === carId
-            ? {
-                ...c,
-                is_liked: !c.is_liked,
-                likes_count: c.is_liked ? c.likes_count - 1 : c.likes_count + 1,
-              }
-            : c
-        )
+      const updatedCars = cars.map(c =>
+        c.id === carId
+          ? {
+              ...c,
+              is_liked: !c.is_liked,
+              likes_count: c.is_liked ? c.likes_count - 1 : c.likes_count + 1,
+            }
+          : c
       );
+      setCars(updatedCars);
+      applyFilters(); // Reapply filters to update filtered cars
     } catch (error) {
       console.error('Error toggling like:', error);
     }
   };
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchCars(false);
-  }, []); // No dependencies needed
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedMake('All');
+    setSelectedFuelType('All');
+    setSelectedBodyType('All');
+    setSelectedLocation('All');
+    setSelectedPriceRange('All');
+  };
 
-  // Track if initial load has been completed
-  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
-  
-  // Debounce timer ref to prevent multiple simultaneous calls
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // Track previous filters to detect actual changes
-  const prevFiltersRef = useRef(filters);
-
-  // Initial load only - single useEffect, no complex dependencies
+  // Effects
   useEffect(() => {
-    const loadInitialData = async () => {
-      console.log('🔄 SearchScreen: Initial load starting...');
-      try {
-        setInitialLoading(true);
-        await fetchFilterData();
-        await fetchCars(true);
-        setHasInitiallyLoaded(true);
-        console.log('✅ SearchScreen: Initial load complete');
-      } catch (error) {
-        console.error('❌ SearchScreen: Initial load error:', error);
-      } finally {
-        setInitialLoading(false);
-      }
-    };
-    
-    loadInitialData();
-    
-    // Cleanup debounce timer on unmount
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []); // Only run once on mount
+    fetchCarsAndFilters();
+  }, []);
 
-  // Manual filter handling with debouncing - no automatic useEffect
-  const handleFilterChange = useCallback((newFilters: SearchFilters) => {
-    // Clear any existing debounce timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
+  useEffect(() => {
+    applyFilters();
+  }, [searchQuery, selectedMake, selectedFuelType, selectedBodyType, selectedLocation, selectedPriceRange, cars]);
 
-    // Update filters immediately for UI responsiveness
-    setFilters(newFilters);
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchCarsAndFilters();
+  };
 
-    // Only fetch if initial load is complete and filters actually changed
-    if (hasInitiallyLoaded) {
-      console.log('🔍 SearchScreen: Filter changed, debouncing...', newFilters);
-      
-      debounceTimerRef.current = setTimeout(() => {
-        console.log('🔍 SearchScreen: Applying filters after debounce');
-        fetchCars(false);
-      }, 300);
-    }
-  }, [hasInitiallyLoaded]);
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('ro-RO', {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 0,
+    }).format(price);
+  };
 
-  const filteredCars = useMemo(() => {
-    return cars; // Filtering is done on the server side
-  }, [cars]);
-
-  const FilterButton = ({ 
-    title, 
-    selected, 
-    onPress 
-  }: { 
-    title: string; 
-    selected: boolean; 
-    onPress: () => void; 
-  }) => (
+  const FilterButton = ({ title, selected, onPress }: { title: string; selected: boolean; onPress: () => void }) => (
     <TouchableOpacity
       style={[styles.filterButton, selected && styles.filterButtonActive]}
       onPress={onPress}
@@ -365,16 +255,39 @@ function SearchScreen() {
     </TouchableOpacity>
   );
 
-  const updateFilter = (key: keyof SearchFilters, value: string) => {
-    const newFilters = { ...filters, [key]: value };
-    handleFilterChange(newFilters);
-  };
+  const renderCarItem = ({ item }: { item: Car }) => (
+    <TouchableOpacity 
+      style={styles.carCard}
+      onPress={() => router.push(`/car/${item.id}`)}
+    >
+      <Image source={{ uri: item.images[0] }} style={styles.carImage} />
+      <TouchableOpacity 
+        style={styles.heartButton}
+        onPress={() => handleLike(item.id)}
+      >
+        <Heart 
+          size={20} 
+          color={item.is_liked ? '#F97316' : '#fff'} 
+          fill={item.is_liked ? '#F97316' : 'none'}
+        />
+      </TouchableOpacity>
+      <View style={styles.carInfo}>
+        <Text style={styles.carTitle}>{item.make} {item.model}</Text>
+        <Text style={styles.carYear}>{item.year}</Text>
+        <Text style={styles.carPrice}>{formatPrice(item.price)}</Text>
+        <View style={styles.carLocation}>
+          <MapPin size={14} color="#666" />
+          <Text style={styles.locationText}>{item.location}</Text>
+        </View>
+        <View style={styles.carStats}>
+          <Text style={styles.statsText}>{item.likes_count} likes</Text>
+          <Text style={styles.statsText}>{item.fuel_type}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 
-  const handleCarPress = (carId: string) => {
-    router.push(`/car/${carId}`);
-  };
-
-  if (initialLoading) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -387,173 +300,154 @@ function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Descoperă Mașini</Text>
-          {filtering && (
-            <ActivityIndicator 
-              size="small" 
-              color="#F97316" 
-              style={styles.filteringIndicator}
-            />
-          )}
-        </View>
-        <TouchableOpacity style={styles.filterIcon}>
+        <Text style={styles.title}>Caută Vehicule</Text>
+        <TouchableOpacity 
+          style={styles.filterIcon}
+          onPress={() => setShowFilters(!showFilters)}
+        >
           <Filter size={24} color="#F97316" />
         </TouchableOpacity>
       </View>
 
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Search size={20} color="#666" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Caută mașini..."
+            placeholder="Caută după marcă, model..."
             placeholderTextColor="#666"
-            value={filters.searchQuery}
-            onChangeText={(text) => updateFilter('searchQuery', text)}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View style={styles.filtersSection}>
-          <Text style={styles.sectionTitle}>Marcă</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.filterRow}>
-              {filterData.makes.map((make) => (
+      {/* Filters */}
+      {showFilters && (
+        <View style={styles.filtersContainer}>
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Marcă</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={filterOptions.makes}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
                 <FilterButton
-                  key={make}
-                  title={make}
-                  selected={filters.selectedMake === make}
-                  onPress={() => updateFilter('selectedMake', make)}
+                  title={item}
+                  selected={selectedMake === item}
+                  onPress={() => setSelectedMake(item)}
                 />
-              ))}
-            </View>
-          </ScrollView>
+              )}
+            />
+          </View>
 
-          <Text style={styles.sectionTitle}>Preț</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.filterRow}>
-              {filterData.priceRanges.map((range) => (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Preț</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={filterOptions.priceRanges}
+              keyExtractor={(item) => item.label}
+              renderItem={({ item }) => (
                 <FilterButton
-                  key={range.label}
-                  title={range.label}
-                  selected={filters.selectedPriceRange === range.label}
-                  onPress={() => updateFilter('selectedPriceRange', range.label)}
+                  title={item.label}
+                  selected={selectedPriceRange === item.label}
+                  onPress={() => setSelectedPriceRange(item.label)}
                 />
-              ))}
-            </View>
-          </ScrollView>
+              )}
+            />
+          </View>
 
-          <Text style={styles.sectionTitle}>Combustibil</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.filterRow}>
-              {filterData.fuelTypes.map((fuel) => (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Combustibil</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={filterOptions.fuelTypes}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
                 <FilterButton
-                  key={fuel}
-                  title={fuel}
-                  selected={filters.selectedFuelType === fuel}
-                  onPress={() => updateFilter('selectedFuelType', fuel)}
+                  title={item}
+                  selected={selectedFuelType === item}
+                  onPress={() => setSelectedFuelType(item)}
                 />
-              ))}
-            </View>
-          </ScrollView>
+              )}
+            />
+          </View>
 
-          <Text style={styles.sectionTitle}>Locație</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.filterRow}>
-              {filterData.locations.map((location) => (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Tip Caroserie</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={filterOptions.bodyTypes}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
                 <FilterButton
-                  key={location}
-                  title={location}
-                  selected={filters.selectedLocation === location}
-                  onPress={() => updateFilter('selectedLocation', location)}
+                  title={item}
+                  selected={selectedBodyType === item}
+                  onPress={() => setSelectedBodyType(item)}
                 />
-              ))}
-            </View>
-          </ScrollView>
+              )}
+            />
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Locație</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={filterOptions.locations}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <FilterButton
+                  title={item}
+                  selected={selectedLocation === item}
+                  onPress={() => setSelectedLocation(item)}
+                />
+              )}
+            />
+          </View>
+
+          <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+            <Text style={styles.clearFiltersText}>Șterge Filtrele</Text>
+          </TouchableOpacity>
         </View>
+      )}
 
-        <View style={styles.resultsSection}>
-          <Text style={styles.resultsTitle}>
-            {filteredCars.length} Mașini Găsite
-          </Text>
-          {filteredCars.length === 0 && !filtering && hasInitiallyLoaded ? (
-            <View style={styles.emptyResults}>
-              <Text style={styles.emptyResultsTitle}>Nu am găsit mașini</Text>
-              <Text style={styles.emptyResultsSubtitle}>
-                Încearcă să modifici filtrele pentru mai multe rezultate
+      {/* Results */}
+      <View style={styles.resultsContainer}>
+        <Text style={styles.resultsTitle}>
+          {filteredCars.length} {filteredCars.length === 1 ? 'Vehicul Găsit' : 'Vehicule Găsite'}
+        </Text>
+        
+        <FlatList
+          data={filteredCars}
+          renderItem={renderCarItem}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>Nu am găsit vehicule</Text>
+              <Text style={styles.emptySubtitle}>
+                Încearcă să modifici filtrele sau termenul de căutare
               </Text>
-              <TouchableOpacity 
-                style={styles.clearFiltersButton}
-                onPress={() => {
-                  const clearedFilters = {
-                    searchQuery: '',
-                    selectedMake: 'All',
-                    selectedPriceRange: 'All',
-                    selectedFuelType: 'All',
-                    selectedLocation: 'All',
-                  };
-                  handleFilterChange(clearedFilters);
-                }}
-              >
-                <Text style={styles.clearFiltersText}>Șterge Filtrele</Text>
-              </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.carGrid}>
-              {filteredCars.map((car) => (
-                <TouchableOpacity 
-                  key={car.id} 
-                  style={styles.carCard}
-                  onPress={() => handleCarPress(car.id)}
-                >
-                  <Image source={{ uri: car.images[0] }} style={styles.carImage} />
-                  <TouchableOpacity 
-                    style={styles.heartButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleLike(car.id);
-                    }}
-                  >
-                    <Heart 
-                      size={20} 
-                      color={car.is_liked ? '#F97316' : '#fff'} 
-                      fill={car.is_liked ? '#F97316' : 'none'}
-                    />
-                  </TouchableOpacity>
-                  <View style={styles.carInfo}>
-                    <Text style={styles.carTitle}>{car.make} {car.model}</Text>
-                    <Text style={styles.carYear}>{car.year}</Text>
-                    <Text style={styles.carPrice}>{formatPrice(car.price)}</Text>
-                    <View style={styles.carLocation}>
-                      <MapPin size={14} color="#666" />
-                      <Text style={styles.locationText}>{car.location}</Text>
-                    </View>
-                    <View style={styles.carStats}>
-                      <Text style={styles.statsText}>{car.likes_count} likes</Text>
-                      <Text style={styles.statsText}>{car.fuel_type}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-      </ScrollView>
+          }
+        />
+      </View>
     </SafeAreaView>
   );
 }
-
-// Export memoized component for maximum performance
-export default React.memo(SearchScreen);
 
 const styles = StyleSheet.create({
   container: {
@@ -578,24 +472,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#fff',
-  },
-  filteringIndicator: {
-    marginLeft: 12,
   },
   filterIcon: {
     padding: 8,
   },
   searchContainer: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   searchBox: {
     flexDirection: 'row',
@@ -612,23 +499,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#fff',
   },
-  content: {
-    flex: 1,
-  },
-  filtersSection: {
+  filtersContainer: {
+    backgroundColor: '#111',
     paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingVertical: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    marginHorizontal: 20,
   },
-  sectionTitle: {
-    fontSize: 18,
+  filterSection: {
+    marginBottom: 16,
+  },
+  filterTitle: {
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#fff',
-    marginBottom: 12,
-    marginTop: 16,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    paddingBottom: 8,
+    marginBottom: 8,
   },
   filterButton: {
     backgroundColor: '#1a1a1a',
@@ -651,18 +537,28 @@ const styles = StyleSheet.create({
   filterButtonTextActive: {
     color: '#000',
   },
-  resultsSection: {
+  clearFiltersButton: {
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  clearFiltersText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+  },
+  resultsContainer: {
+    flex: 1,
     paddingHorizontal: 20,
   },
   resultsTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#fff',
     marginBottom: 16,
   },
-  carGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  row: {
     justifyContent: 'space-between',
   },
   carCard: {
@@ -709,7 +605,7 @@ const styles = StyleSheet.create({
   carLocation: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   locationText: {
     fontSize: 12,
@@ -720,39 +616,26 @@ const styles = StyleSheet.create({
   carStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
   },
   statsText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#666',
   },
-  emptyResults: {
+  emptyContainer: {
     alignItems: 'center',
     paddingVertical: 40,
   },
-  emptyResultsTitle: {
+  emptyTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     color: '#fff',
     marginBottom: 8,
   },
-  emptyResultsSubtitle: {
+  emptySubtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#666',
     textAlign: 'center',
-    marginBottom: 24,
-  },
-  clearFiltersButton: {
-    backgroundColor: '#F97316',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  clearFiltersText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000',
   },
 });
