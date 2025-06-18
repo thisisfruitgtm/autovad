@@ -127,6 +127,9 @@ GRANT SELECT ON public.likes TO anon, authenticated;
 GRANT ALL ON public.likes TO authenticated;
 GRANT ALL ON public.users TO authenticated;
 
+-- Enable Realtime for likes table
+ALTER PUBLICATION supabase_realtime ADD TABLE public.likes;
+
 -- Create any missing users for existing auth users
 INSERT INTO public.users (
   id,

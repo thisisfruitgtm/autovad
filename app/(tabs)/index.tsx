@@ -40,6 +40,7 @@ function Feed() {
   const [currentVisibleIndex, setCurrentVisibleIndex] = useState(0);
   const [isTabFocused, setIsTabFocused] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const { t } = useTranslation();
   const viewedCarsRef = useRef(new Set<string>());
   const hasUserInteracted = useRef(false);
@@ -200,11 +201,21 @@ function Feed() {
     useCallback(() => {
       // Tab became active
       setIsTabFocused(true);
+      
+      // Refresh cars data to ensure like states are up to date
+      // But only if enough time has passed since last refresh (5 seconds)
+      const now = Date.now();
+      if (user && cars.length > 0 && (now - lastRefreshTime) > 5000) {
+        console.log('🔄 Feed: Tab focused, refreshing like states');
+        setLastRefreshTime(now);
+        refreshCars();
+      }
+      
       return () => {
         // Tab lost focus - pause all videos
         setIsTabFocused(false);
       };
-    }, [])
+    }, [user, cars.length, refreshCars, lastRefreshTime])
   );
 
   const handleLike = useCallback(async (carId: string) => {

@@ -3,6 +3,8 @@ import { Car } from '@/types/car';
 import { useAuth } from './useAuth';
 import { CarService } from '@/services/carService';
 import { supabase } from '@/lib/supabase';
+import { Alert } from 'react-native';
+import { DeviceEventEmitter } from 'react-native';
 
 export function useCars() {
   const [cars, setCars] = useState<Car[]>([]);
@@ -33,6 +35,91 @@ export function useCars() {
   useEffect(() => {
     fetchCars();
   }, [user]);
+
+  // Listen for like state changes from other components
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('likeStateChanged', ({ carId, isLiked }) => {
+      console.log('🔔 useCars: Like state change event received:', { carId, isLiked });
+      setCars(prevCars =>
+        prevCars.map(c =>
+          c.id === carId
+            ? {
+                ...c,
+                is_liked: isLiked,
+                likes_count: isLiked ? c.likes_count + 1 : Math.max(0, c.likes_count - 1),
+              }
+            : c
+        )
+      );
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Real-time subscription to likes changes
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('🔄 useCars: Setting up real-time likes subscription');
+
+    // Create a unique channel name to avoid conflicts
+    const channelName = `likes_changes_${user.id}_${Date.now()}`;
+    
+    const likesSubscription = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'likes',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('🔔 useCars: Likes change detected:', payload);
+          
+          if (payload.eventType === 'DELETE') {
+            // Unlike - update car to not liked
+            const carId = payload.old.car_id;
+            setCars(prevCars =>
+              prevCars.map(c =>
+                c.id === carId
+                  ? {
+                      ...c,
+                      is_liked: false,
+                      likes_count: Math.max(0, c.likes_count - 1),
+                    }
+                  : c
+              )
+            );
+          } else if (payload.eventType === 'INSERT') {
+            // Like - update car to liked
+            const carId = payload.new.car_id;
+            setCars(prevCars =>
+              prevCars.map(c =>
+                c.id === carId
+                  ? {
+                      ...c,
+                      is_liked: true,
+                      likes_count: c.likes_count + 1,
+                    }
+                  : c
+              )
+            );
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔄 useCars: Subscription status:', status);
+      });
+
+    return () => {
+      console.log('🔄 useCars: Cleaning up likes subscription');
+      likesSubscription.unsubscribe();
+    };
+  }, [user?.id]); // Only depend on user.id to avoid unnecessary re-subscriptions
 
   const refreshCars = () => {
     fetchCars();
@@ -67,21 +154,59 @@ export function useCars() {
       }
 
       if (car.is_liked) {
-        // Unlike - delete the like
-        const { error } = await supabase
-          .from('likes')
-          .delete()
-          .eq('car_id', carId)
-          .eq('user_id', user.id);
+        // Show confirmation popup for unlike
+        Alert.alert(
+          'Șterge din favorite',
+          'Ești sigur că vrei să ștergi această mașină din favorite?',
+          [
+            {
+              text: 'Anulează',
+              style: 'cancel'
+            },
+            {
+              text: 'Șterge',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  // Unlike - delete the like
+                  const { error } = await supabase
+                    .from('likes')
+                    .delete()
+                    .eq('car_id', carId)
+                    .eq('user_id', user.id);
 
-        if (error) {
-          console.error('❌ useCars: Error unliking car:', error);
-          return;
-        }
+                  if (error) {
+                    console.error('❌ useCars: Error unliking car:', error);
+                    return;
+                  }
 
-        console.log('✅ useCars: Successfully unliked car');
+                  console.log('✅ useCars: Successfully unliked car');
+
+                  // Update local state
+                  setCars(prevCars =>
+                    prevCars.map(c =>
+                      c.id === carId
+                        ? {
+                            ...c,
+                            is_liked: false,
+                            likes_count: c.likes_count - 1,
+                          }
+                        : c
+                    )
+                  );
+
+                  // Emit event to notify other components
+                  DeviceEventEmitter.emit('likeStateChanged', { carId, isLiked: false });
+                } catch (error) {
+                  console.error('❌ useCars: Error unliking car:', error);
+                  Alert.alert('Eroare', 'Nu s-a putut șterge mașina din favorite. Te rog încearcă din nou.');
+                }
+              }
+            }
+          ]
+        );
       } else {
-        // Like - insert new like
+        // Like without confirmation
         const { error } = await supabase
           .from('likes')
           .insert({ car_id: carId, user_id: user.id });
@@ -92,20 +217,23 @@ export function useCars() {
         }
 
         console.log('✅ useCars: Successfully liked car');
-      }
 
-      // Update local state
-      setCars(prevCars =>
-        prevCars.map(c =>
-          c.id === carId
-            ? {
-                ...c,
-                is_liked: !c.is_liked,
-                likes_count: c.is_liked ? c.likes_count - 1 : c.likes_count + 1,
-              }
-            : c
-        )
-      );
+        // Update local state
+        setCars(prevCars =>
+          prevCars.map(c =>
+            c.id === carId
+              ? {
+                  ...c,
+                  is_liked: true,
+                  likes_count: c.likes_count + 1,
+                }
+              : c
+          )
+        );
+
+        // Emit event to notify other components
+        DeviceEventEmitter.emit('likeStateChanged', { carId, isLiked: true });
+      }
     } catch (error) {
       console.error('❌ useCars: Error toggling like:', error);
     }

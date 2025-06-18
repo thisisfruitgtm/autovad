@@ -304,10 +304,10 @@ export default function SearchScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Caută Vehicule</Text>
         <TouchableOpacity 
-          style={styles.filterIcon}
+          style={styles.filterButtonHeader}
           onPress={() => setShowFilters(!showFilters)}
         >
-          <Filter size={24} color="#F97316" />
+          <Text style={styles.filterButtonHeaderText}>Filtrează</Text>
         </TouchableOpacity>
       </View>
 
@@ -477,8 +477,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#fff',
   },
-  filterIcon: {
-    padding: 8,
+  filterButtonHeader: {
+    backgroundColor: '#F97316',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterButtonHeaderText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#fff',
   },
   searchContainer: {
     paddingHorizontal: 20,

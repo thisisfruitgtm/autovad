@@ -11,6 +11,7 @@ import {
   Linking,
   Modal,
   FlatList,
+  DeviceEventEmitter,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -132,14 +133,46 @@ export default function CarDetailsScreen() {
 
     try {
       if (car.is_liked) {
-        await supabase
-          .from('likes')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('car_id', car.id);
+        // Show confirmation popup for unlike
+        Alert.alert(
+          'Șterge din favorite',
+          'Ești sigur că vrei să ștergi această mașină din favorite?',
+          [
+            {
+              text: 'Anulează',
+              style: 'cancel'
+            },
+            {
+              text: 'Șterge',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await supabase
+                    .from('likes')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('car_id', car.id);
 
-        await logActivity(user.id, 'unlike', 'car', car.id);
+                  await logActivity(user.id, 'unlike', 'car', car.id);
+
+                  setCar(prev => prev ? {
+                    ...prev,
+                    is_liked: false,
+                    likes_count: prev.likes_count - 1,
+                  } : null);
+
+                  // Emit event to notify other components
+                  DeviceEventEmitter.emit('likeStateChanged', { carId: car.id, isLiked: false });
+                } catch (error) {
+                  console.error('Error unliking car:', error);
+                  Alert.alert('Eroare', 'Nu s-a putut șterge mașina din favorite. Te rog încearcă din nou.');
+                }
+              }
+            }
+          ]
+        );
       } else {
+        // Like without confirmation
         await supabase
           .from('likes')
           .insert({
@@ -148,15 +181,19 @@ export default function CarDetailsScreen() {
           });
 
         await logActivity(user.id, 'like', 'car', car.id);
-      }
 
-      setCar(prev => prev ? {
-        ...prev,
-        is_liked: !prev.is_liked,
-        likes_count: prev.is_liked ? prev.likes_count - 1 : prev.likes_count + 1,
-      } : null);
+        setCar(prev => prev ? {
+          ...prev,
+          is_liked: true,
+          likes_count: prev.likes_count + 1,
+        } : null);
+
+        // Emit event to notify other components
+        DeviceEventEmitter.emit('likeStateChanged', { carId: car.id, isLiked: true });
+      }
     } catch (error) {
       console.error('Error toggling like:', error);
+      Alert.alert('Eroare', 'A apărut o eroare. Te rog încearcă din nou.');
     }
   };
 
