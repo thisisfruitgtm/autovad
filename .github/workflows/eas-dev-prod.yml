@@ -36,13 +36,9 @@ jobs:
       - name: EAS OTA Update
         run: eas update --branch "${{ github.ref_name }}" --non-interactive --message "OTA update on ${{ github.ref_name }}"
 
-      - name: EAS Build Android
+      - name: EAS Production Builds (iOS + Android)
         if: github.ref_name == 'main'
-        run: eas build --platform android --non-interactive --profile production
-
-      - name: EAS Build iOS
-        if: github.ref_name == 'main'
-        run: eas build --platform ios --non-interactive --profile production
+        run: eas workflow:run create-production-builds.yml --non-interactive
 
   promote-dev-to-main:
     runs-on: ubuntu-latest
