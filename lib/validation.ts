@@ -280,7 +280,7 @@ export class Validator {
     } = {}
   ): { isValid: boolean; error?: string } {
     const {
-      maxSize = 10 * 1024 * 1024, // 10MB default
+      maxSize = 70 * 1024 * 1024, // 70MB default
       allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'],
       allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.mov']
     } = options;

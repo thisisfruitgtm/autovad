@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { 
-  Camera, 
+  Camera as CameraIcon, 
   Image as ImageIcon, 
   MapPin, 
   DollarSign, 
@@ -27,7 +27,9 @@ import {
   Check,
   Video,
   StopCircle,
-  Circle
+  Circle,
+  Pause,
+  Play
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -53,34 +55,128 @@ class MediaCompressor {
     try {
       console.log('🔄 Compressing image:', uri);
       
+      // Validate input URI
+      if (!uri || uri.trim() === '') {
+        throw new Error('Invalid URI provided for compression');
+      }
+      
+      // Check if file exists before compression
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist for compression');
+      }
+      
+      console.log('📦 Original file size:', fileInfo.size ? `${(fileInfo.size / 1024 / 1024).toFixed(2)}MB` : 'unknown');
+      
+      // Define target dimensions for vertical format (9:16 aspect ratio)
+      const targetWidth = 720;
+      const targetHeight = 1280;
+      
+      // Process image with smart resizing and cropping for portrait format
       const manipulatedImage = await manipulateAsync(
         uri,
         [
-          { resize: { width: 1280, height: 720 } }, // 720p max resolution
+          // First resize to target width while maintaining aspect ratio
+          { resize: { width: targetWidth } }
         ],
         {
-          compress: 0.8, // 80% quality
+          compress: 0.9, // High quality first pass
           format: SaveFormat.JPEG,
         }
       );
       
-      console.log('✅ Image compressed successfully');
-      return manipulatedImage.uri;
+      // Now crop to exact portrait dimensions (9:16) from center
+      // We need to get the current dimensions after first resize
+      const finalImage = await manipulateAsync(
+        manipulatedImage.uri,
+        [
+          // Crop to exact portrait dimensions - this will center crop to 720x1280
+          {
+            crop: {
+              originX: 0,
+              originY: 0, // Start from top since camera should give us portrait already
+              width: targetWidth,
+              height: targetHeight
+            }
+          }
+        ],
+        {
+          compress: 0.8, // Final compression
+          format: SaveFormat.JPEG,
+        }
+      );
+      
+      // Validate output
+      const compressedFileInfo = await FileSystem.getInfoAsync(finalImage.uri);
+      if (!compressedFileInfo.exists) {
+        throw new Error('Compressed file was not created properly');
+      }
+      
+      console.log('📦 Compressed file size:', compressedFileInfo.size ? `${(compressedFileInfo.size / 1024 / 1024).toFixed(2)}MB` : 'unknown');
+      console.log('✅ Image compressed successfully - Portrait format (720x1280) enforced');
+      return finalImage.uri;
     } catch (error) {
       console.error('❌ Error compressing image:', error);
-      return uri; // Return original if compression fails
+      // If compression fails, try a simpler approach
+      try {
+        console.log('🔄 Trying fallback compression...');
+        const fallbackImage = await manipulateAsync(
+          uri,
+          [
+            { resize: { width: 720, height: 1280 } }
+          ],
+          {
+            compress: 0.8,
+            format: SaveFormat.JPEG,
+          }
+        );
+        
+        const fallbackFileInfo = await FileSystem.getInfoAsync(fallbackImage.uri);
+        if (fallbackFileInfo.exists) {
+          console.log('✅ Fallback compression successful');
+          return fallbackImage.uri;
+        }
+      } catch (fallbackError) {
+        console.error('❌ Fallback compression also failed:', fallbackError);
+      }
+      
+      // Last resort: return original if it exists
+      try {
+        const originalFileInfo = await FileSystem.getInfoAsync(uri);
+        if (originalFileInfo.exists) {
+          console.log('⚠️ Using original image due to compression failure');
+          return uri;
+        }
+      } catch (validationError) {
+        console.error('❌ Original file validation failed:', validationError);
+      }
+      throw error; // Re-throw if everything fails
     }
   }
 
   static async compressVideo(uri: string): Promise<string> {
     try {
-      console.log('🔄 Video ready for upload:', uri);
-      // For now, return the original URI
-      // In production, you might want to use FFmpeg or similar for video compression
+      console.log('🔄 Compressing video:', uri);
+      
+      // Check file size first
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      if (fileInfo.exists && (fileInfo as any).size) {
+        const fileSizeInMB = (fileInfo as any).size / (1024 * 1024);
+        console.log(`📦 Original video size: ${fileSizeInMB.toFixed(2)} MB`);
+        
+        // If file is larger than 70MB, we need to compress it
+        if (fileSizeInMB > 70) {
+          console.log('⚠️ Video file too large, compression needed');
+          // For now, we'll reject files over 70MB and ask user to record shorter video
+          throw new Error(`Video file is too large (${fileSizeInMB.toFixed(1)}MB). Please record a shorter video or try again.`);
+        }
+      }
+      
+      console.log('✅ Video size acceptable for upload');
       return uri;
     } catch (error) {
       console.error('❌ Error processing video:', error);
-      return uri;
+      throw error;
     }
   }
 
@@ -93,15 +189,19 @@ class MediaCompressor {
   }
 }
 
-// Custom Camera Component with Enhanced UX
-function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: string) => void; onClose: () => void }) {
+// Custom Video Camera Component with Enhanced UX and Stability
+function CustomVideoCamera({ 
+  onVideoRecorded, 
+  onClose
+}: { 
+  onVideoRecorded: (uri: string) => void; 
+  onClose: () => void; 
+}) {
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [facing, setFacing] = useState<CameraType>('back');
   const [isReady, setIsReady] = useState(false);
-  const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
-  const [recordingPaused, setRecordingPaused] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const recordingInterval = useRef<number | null>(null);
 
@@ -118,9 +218,9 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
     if (isRecording) {
       recordingInterval.current = setInterval(() => {
         setRecordingTime(prev => {
-          if (prev >= 60) {
+          if (prev >= 30) {
             stopRecording();
-            return 60;
+            return 30;
           }
           return prev + 1;
         });
@@ -147,7 +247,7 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
       <View style={styles.cameraContainer}>
         <Animated.View entering={FadeInDown.delay(200)} style={styles.cameraPermissionContainer}>
           <Animated.View entering={FadeInDown.delay(400)} style={styles.permissionIconContainer}>
-            <Camera size={64} color="#F97316" />
+            <CameraIcon size={64} color="#F97316" />
           </Animated.View>
           <Animated.Text entering={FadeInDown.delay(600)} style={styles.cameraPermissionTitle}>
             Acces la cameră necesar
@@ -166,19 +266,18 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
   }
 
   const startRecording = async () => {
-    if (!cameraRef.current || isRecording) return;
+    if (!cameraRef.current || isRecording || !isReady) return;
     
     try {
       setIsRecording(true);
       setRecordingTime(0);
       
       const video = await cameraRef.current.recordAsync({
-        maxDuration: 60,
+        maxDuration: 30,
       });
       
-      if (video) {
-        const compressedVideo = await MediaCompressor.compressVideo(video.uri);
-        onVideoRecorded(compressedVideo);
+      if (video && video.uri) {
+        await onVideoRecorded(video.uri);
       }
     } catch (error) {
       console.error('Error recording video:', error);
@@ -202,7 +301,15 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
         style={styles.camera}
         facing={facing}
         mode="video"
-        onCameraReady={() => setIsReady(true)}
+        videoStabilizationMode="auto"
+        onCameraReady={() => {
+          console.log('📸 Video camera is ready');
+          setIsReady(true);
+        }}
+        onMountError={(error: any) => {
+          console.error('❌ Camera mount error:', error);
+          Alert.alert('Eroare cameră', 'Nu s-a putut inițializa camera');
+        }}
       />
       
       {/* Camera Ready Overlay */}
@@ -220,30 +327,22 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
         </TouchableOpacity>
         <Animated.View style={[styles.cameraTimer, isRecording && styles.cameraTimerActive]}>
           <Animated.View style={[styles.recordingDot, { opacity: isRecording ? 1 : 0 }]} />
-          <Text style={styles.cameraTimerText}>{formatTime(recordingTime)}/1:00</Text>
+          <Text style={styles.cameraTimerText}>{formatTime(recordingTime)}/0:30</Text>
         </Animated.View>
         <TouchableOpacity 
           style={styles.cameraFlipButton} 
           onPress={() => setFacing(current => current === 'back' ? 'front' : 'back')}
         >
-          <Camera size={24} color="#fff" />
+          <CameraIcon size={24} color="#fff" />
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Recording Progress Circle */}
+      {/* Recording Status Indicator */}
       {isRecording && (
-        <Animated.View entering={FadeInDown} style={styles.recordingProgressContainer}>
-          <View style={styles.recordingProgressBackground}>
-            <View 
-              style={[
-                styles.recordingProgressFill,
-                { 
-                  transform: [{ 
-                    rotate: `${(recordingTime / 60) * 360}deg` 
-                  }] 
-                }
-              ]} 
-            />
+        <Animated.View entering={FadeInDown} style={styles.recordingStatusContainer}>
+          <View style={styles.recordingStatus}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingStatusText}>REC</Text>
           </View>
         </Animated.View>
       )}
@@ -257,62 +356,37 @@ function CustomCamera({ onVideoRecorded, onClose }: { onVideoRecorded: (uri: str
       {/* Recording Tips */}
       {!isRecording && isReady && (
         <Animated.View entering={FadeInDown.delay(800)} style={styles.recordingTips}>
-          <Text style={styles.recordingTipsText}>💡 Filmează mașina din toate unghiurile</Text>
+          <Text style={styles.recordingTipsText}>💡 Filmează mașina din toate unghiurile (max 30s)</Text>
         </Animated.View>
       )}
 
       {/* Bottom controls overlay */}
       <Animated.View entering={FadeInDown.delay(600)} style={styles.cameraControls}>
         <View style={styles.cameraControlsInner}>
-          {/* Gallery Button */}
-          <TouchableOpacity style={styles.galleryButton}>
-            <ImageIcon size={24} color="#fff" />
-          </TouchableOpacity>
+          {/* Empty space for symmetry */}
+          <View style={{ width: 50 }} />
           
           {/* Record Button */}
           <TouchableOpacity
             style={[styles.recordButton, isRecording && styles.recordButtonActive]}
             onPress={isRecording ? stopRecording : startRecording}
-            disabled={recordingTime >= 60}
+            disabled={!isReady}
           >
             <Animated.View style={[
               styles.recordButtonInner,
               isRecording && styles.recordButtonInnerActive
             ]}>
               {isRecording ? (
-                <StopCircle size={28} color="#fff" />
+                <StopCircle size={32} color="#fff" />
               ) : (
-                <Circle size={28} color="#fff" fill="#F97316" />
+                <Circle size={32} color="#fff" fill="#F97316" />
               )}
             </Animated.View>
           </TouchableOpacity>
           
-          {/* Flash Button */}
-          <TouchableOpacity 
-            style={styles.flashButton}
-            onPress={() => setFlashMode(current => 
-              current === 'off' ? 'on' : current === 'on' ? 'auto' : 'off'
-            )}
-          >
-            <Text style={styles.flashButtonText}>
-              {flashMode === 'off' ? '⚡' : flashMode === 'on' ? '💡' : '🔆'}
-            </Text>
-          </TouchableOpacity>
+          {/* Empty space for symmetry */}
+          <View style={{ width: 50 }} />
         </View>
-        
-        {/* Recording Controls */}
-        {isRecording && (
-          <Animated.View entering={FadeInDown} style={styles.recordingControls}>
-            <TouchableOpacity 
-              style={styles.pauseButton}
-              onPress={() => setRecordingPaused(!recordingPaused)}
-            >
-              <Text style={styles.pauseButtonText}>
-                {recordingPaused ? '▶️' : '⏸️'}
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
       </Animated.View>
     </View>
   );
@@ -351,7 +425,8 @@ function PostScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [showCamera, setShowCamera] = useState(false);
+  // Hybrid approach: ImagePicker for photos, CustomCamera for videos
+  const [showVideoCamera, setShowVideoCamera] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [videoUri, setVideoUri] = useState<string>('');
   const [compressing, setCompressing] = useState(false);
@@ -392,7 +467,37 @@ function PostScreen() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const pickImages = async () => {
+  const openCameraForPhotos = async () => {
+    try {
+      // Use ImagePicker camera instead of custom camera for more stability
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permisiune necesară', 'Avem nevoie de acces la cameră pentru a face poze.');
+        return;
+      }
+
+      setCompressing(true);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [9, 16], // Aspect ratio vertical pentru mobile  
+        quality: 1.0, // Use highest quality, we'll compress after
+        exif: false, // Remove EXIF data to avoid orientation issues
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const compressedImage = await MediaCompressor.compressImage(result.assets[0].uri);
+        setImages(prev => [...prev, compressedImage].slice(0, 10)); // Max 10 images
+      }
+    } catch (error) {
+      console.error('Error taking photo with ImagePicker:', error);
+      Alert.alert('Eroare', 'Nu s-a putut face fotografia');
+    } finally {
+      setCompressing(false);
+    }
+  };
+
+  const pickImagesFromGallery = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -405,7 +510,9 @@ function PostScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 1, // We'll compress manually
-        aspect: [16, 9],
+        aspect: [9, 16], // Aspect ratio vertical pentru mobile
+        allowsEditing: true,
+        exif: false, // Remove EXIF data to avoid orientation issues
       });
 
       if (!result.canceled && result.assets) {
@@ -426,13 +533,30 @@ function PostScreen() {
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleVideoRecorded = (uri: string) => {
-    setVideoUri(uri);
-    setShowCamera(false);
+  const handleVideoRecorded = async (uri: string) => {
+    try {
+      // Validate and compress video before setting it
+      const processedVideo = await MediaCompressor.compressVideo(uri);
+      setVideoUri(processedVideo);
+    } catch (error) {
+      console.error('Error processing video:', error);
+      Alert.alert(
+        'Video prea mare', 
+        error instanceof Error ? error.message : 'Te rog înregistrează un video mai scurt.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const nextStep = () => {
     if (currentStep < totalSteps - 1) {
+      // Validare specială pentru pasul 0 (detalii mașină)
+      if (currentStep === 0) {
+        if (!validateCarDetails()) {
+          return; // Nu merge la pasul următor dacă validarea eșuează
+        }
+      }
+      
       setCurrentStep(prev => prev + 1);
     }
   };
@@ -441,6 +565,51 @@ function PostScreen() {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
     }
+  };
+
+  const validateCarDetails = (): boolean => {
+    const currentYear = new Date().getFullYear();
+    
+    // Validare anul mașinii
+    if (formData.year) {
+      const year = parseInt(formData.year);
+      if (isNaN(year) || year < 1900 || year > currentYear + 1) {
+        Alert.alert(
+          'An invalid', 
+          `Anul trebuie să fie între 1900 și ${currentYear + 1}`,
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+    
+    // Validare preț
+    if (formData.price) {
+      const price = parseFloat(formData.price);
+      if (isNaN(price) || price < 0 || price > 10000000) {
+        Alert.alert(
+          'Preț invalid', 
+          'Prețul trebuie să fie între 0 și 10,000,000 RON',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+    
+    // Validare kilometraj
+    if (formData.mileage) {
+      const mileage = parseInt(formData.mileage);
+      if (isNaN(mileage) || mileage < 0 || mileage > 2000000) {
+        Alert.alert(
+          'Kilometraj invalid', 
+          'Kilometrajul trebuie să fie între 0 și 2,000,000 km',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+    
+    return true;
   };
 
   const canProceedFromStep = (step: number): boolean => {
@@ -544,6 +713,11 @@ function PostScreen() {
 
     if (!canProceedFromStep(0) || !canProceedFromStep(1) || !canProceedFromStep(2)) {
       Alert.alert('Informații incomplete', 'Te rog completează toate pașii înainte de a posta');
+      return;
+    }
+
+    // Validare finală pentru detaliile mașinii
+    if (!validateCarDetails()) {
       return;
     }
 
@@ -715,11 +889,15 @@ function PostScreen() {
     );
   }
 
-  if (showCamera) {
+  // Show custom video camera if needed
+  if (showVideoCamera) {
     return (
-      <CustomCamera
-        onVideoRecorded={handleVideoRecorded}
-        onClose={() => setShowCamera(false)}
+      <CustomVideoCamera
+        onVideoRecorded={(uri) => {
+          handleVideoRecorded(uri);
+          setShowVideoCamera(false);
+        }}
+        onClose={() => setShowVideoCamera(false)}
       />
     );
   }
@@ -853,24 +1031,18 @@ function PostScreen() {
       case 1:
         return (
           <Animated.View entering={SlideInRight} exiting={SlideOutLeft} style={styles.stepContent}>
-            <View style={styles.centeredContent}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
               <Animated.Text entering={FadeInDown.delay(200)} style={styles.stepTitle}>
                 Video prezentare
               </Animated.Text>
               <Animated.Text entering={FadeInDown.delay(400)} style={styles.stepSubtitle}>
-                Filmează mașina ta (maxim 60 secunde)
+                Filmează mașina ta (maxim 30 secunde)
               </Animated.Text>
               
               {/* Video Tips */}
-              <Animated.View entering={FadeInDown.delay(600)} style={styles.videoTipsContainer}>
-                <Text style={styles.videoTipsTitle}>🎬 Sfaturi pentru video de calitate</Text>
-                <Text style={styles.videoTipsText}>• Filmează în lumină bună</Text>
-                <Text style={styles.videoTipsText}>• Arată exteriorul din toate unghiurile</Text>
-                <Text style={styles.videoTipsText}>• Include interiorul și portbagajul</Text>
-                <Text style={styles.videoTipsText}>• Pornește motorul să se audă</Text>
-              </Animated.View>
               
-              <Animated.View entering={FadeInDown.delay(800)} style={styles.videoContainer}>
+              
+              <Animated.View entering={FadeInDown.delay(800)} style={styles.videoContainerFixed}>
                 {videoUri ? (
                   <Animated.View entering={FadeInDown} style={styles.videoPreview}>
                     <View style={styles.videoPreviewHeader}>
@@ -881,89 +1053,93 @@ function PostScreen() {
                     </View>
                     
                     <View style={styles.videoPreviewInfo}>
-                                             <Text style={styles.videoSubtext}>Durată: ~60s</Text>
+                      <Text style={styles.videoSubtext}>Durată: ~30s</Text>
                       <Text style={styles.videoQualityText}>✅ Calitate HD</Text>
                     </View>
                     
-                    <TouchableOpacity 
-                      style={styles.rerecordButton}
-                      onPress={() => setShowCamera(true)}
-                    >
+                                          <TouchableOpacity 
+                        style={styles.rerecordButton}
+                        onPress={() => setShowVideoCamera(true)}
+                      >
                       <Video size={20} color="#000" />
                       <Text style={styles.rerecordButtonText}>Înregistrează din nou</Text>
                     </TouchableOpacity>
                   </Animated.View>
                 ) : (
-                  <TouchableOpacity 
-                    style={styles.cameraButton}
-                    onPress={() => setShowCamera(true)}
-                  >
+                                      <TouchableOpacity 
+                      style={styles.cameraButton}
+                      onPress={() => setShowVideoCamera(true)}
+                    >
                     <Animated.View style={styles.cameraButtonIcon}>
-                      <Video size={48} color="#F97316" />
+                      <Video size={28} color="#F97316" />
                     </Animated.View>
                     <Text style={styles.cameraButtonText}>Începe înregistrarea</Text>
                     <Text style={styles.cameraButtonSubtext}>
-                      Prezintă mașina ta în 60 de secunde
+                      Prezintă mașina ta în 30 de secunde
                     </Text>
                     <View style={styles.recordingHints}>
-                      <Text style={styles.recordingHintText}>📱 Ține telefonul orizontal</Text>
-                      <Text style={styles.recordingHintText}>🔊 Vorbește clar despre mașină</Text>
+                      <Text style={styles.videoTipsText}>📱 Ține telefonul orizontal</Text>
+                      <Text style={styles.videoTipsText}>🔊 Vorbește clar despre mașină</Text>
+                      <Text style={styles.videoTipsText}>• Filmează în lumină bună</Text>
+                      <Text style={styles.videoTipsText}>• Arată exteriorul din toate unghiurile</Text>
+                      <Text style={styles.videoTipsText}>• Include interiorul și portbagajul</Text>
+                      <Text style={styles.videoTipsText}>• Pornește motorul să se audă</Text>
                     </View>
                   </TouchableOpacity>
                 )}
               </Animated.View>
-            </View>
+            </ScrollView>
           </Animated.View>
         );
 
       case 2:
         return (
           <Animated.View entering={SlideInRight} exiting={SlideOutLeft} style={styles.stepContent}>
-            <View style={styles.centeredContent}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
               <Text style={styles.stepTitle}>Fotografii</Text>
               <Text style={styles.stepSubtitle}>Adaugă până la 10 fotografii ({images.length}/10)</Text>
               
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* Photo Upload Tips */}
-                <Animated.View entering={FadeInDown.delay(200)} style={styles.photoTipsContainer}>
-                  <Text style={styles.photoTipsTitle}>📸 Sfaturi pentru fotografii de calitate</Text>
-                  <Text style={styles.photoTipsText}>• Fotografiază în lumină naturală</Text>
-                  <Text style={styles.photoTipsText}>• Include exteriorul și interiorul</Text>
-                  <Text style={styles.photoTipsText}>• Arată eventualele defecte</Text>
-                </Animated.View>
+              {/* Photo Upload Tips */}
+              <Animated.View entering={FadeInDown.delay(200)} style={styles.photoTipsContainer}>
+                <Text style={styles.photoTipsTitle}>📸 Sfaturi pentru fotografii de calitate</Text>
+                <Text style={styles.photoTipsText}>• Fotografiază în lumină naturală</Text>
+                <Text style={styles.photoTipsText}>• Include exteriorul și interiorul</Text>
+                <Text style={styles.photoTipsText}>• Arată eventualele defecte</Text>
+              </Animated.View>
 
-                <Animated.View entering={FadeInDown.delay(400)} style={styles.imagesGrid}>
-                  {images.map((image, index) => (
-                    <Animated.View 
-                      key={index} 
-                      entering={FadeInDown.delay(index * 100)}
-                      style={styles.imageItem}
-                    >
-                      <Image source={{ uri: image }} style={styles.imagePreview} />
-                      <View style={styles.imageOverlay}>
-                        <TouchableOpacity 
-                          style={styles.removeImageButton}
-                          onPress={() => removeImage(index)}
-                        >
-                          <X size={16} color="#fff" />
-                        </TouchableOpacity>
-                        <View style={styles.imageIndex}>
-                          <Text style={styles.imageIndexText}>{index + 1}</Text>
-                        </View>
+              <Animated.View entering={FadeInDown.delay(400)} style={styles.imagesGrid}>
+                {images.map((image, index) => (
+                  <Animated.View 
+                    key={index} 
+                    entering={FadeInDown.delay(index * 100)}
+                    style={styles.imageItem}
+                  >
+                    <Image source={{ uri: image }} style={styles.imagePreview} />
+                    <View style={styles.imageOverlay}>
+                      <TouchableOpacity 
+                        style={styles.removeImageButton}
+                        onPress={() => removeImage(index)}
+                      >
+                        <X size={16} color="#fff" />
+                      </TouchableOpacity>
+                      <View style={styles.imageIndex}>
+                        <Text style={styles.imageIndexText}>{index + 1}</Text>
                       </View>
-                      {index === 0 && (
-                        <View style={styles.primaryImageBadge}>
-                          <Text style={styles.primaryImageText}>PRINCIPALĂ</Text>
-                        </View>
-                      )}
-                    </Animated.View>
-                  ))}
-                  
-                  {images.length < 10 && (
+                    </View>
+                    {index === 0 && (
+                      <View style={styles.primaryImageBadge}>
+                        <Text style={styles.primaryImageText}>PRINCIPALĂ</Text>
+                      </View>
+                    )}
+                  </Animated.View>
+                ))}
+                
+                                {images.length < 10 && (
+                  <>
                     <Animated.View entering={FadeInDown.delay(images.length * 100)}>
                       <TouchableOpacity 
                         style={[styles.addImageButton, compressing && styles.addImageButtonLoading]} 
-                        onPress={pickImages}
+                        onPress={openCameraForPhotos}
                         disabled={compressing}
                       >
                         {compressing ? (
@@ -974,33 +1150,58 @@ function PostScreen() {
                         ) : (
                           <>
                             <View style={styles.addImageIcon}>
-                              <Plus size={28} color="#F97316" />
+                              <CameraIcon size={28} color="#F97316" />
                             </View>
-                            <Text style={styles.addImageText}>Adaugă fotografii</Text>
+                            <Text style={styles.addImageText}>Fă o poză</Text>
                             <Text style={styles.addImageSubtext}>
-                              {images.length === 0 ? 'Prima fotografie va fi principală' : `${10 - images.length} rămase`}
+                              Aspect ratio 9:16 automat
                             </Text>
                           </>
                         )}
                       </TouchableOpacity>
                     </Animated.View>
-                  )}
-                </Animated.View>
-
-                {/* Photo Organization */}
-                {images.length > 1 && (
-                  <Animated.View entering={FadeInDown.delay(600)} style={styles.photoOrganization}>
-                    <Text style={styles.organizationTitle}>Organizează fotografiile</Text>
-                    <Text style={styles.organizationSubtitle}>
-                      Ține apăsat și trage pentru a schimba ordinea
-                    </Text>
-                    <View style={styles.photoReorderHint}>
-                      <Text style={styles.reorderHintText}>💡 Prima fotografie va fi afișată ca principală</Text>
-                    </View>
-                  </Animated.View>
+                    
+                    <Animated.View entering={FadeInDown.delay((images.length + 1) * 100)}>
+                      <TouchableOpacity 
+                        style={[styles.addImageButton, compressing && styles.addImageButtonLoading]} 
+                        onPress={pickImagesFromGallery}
+                        disabled={compressing}
+                      >
+                        {compressing ? (
+                          <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color="#F97316" />
+                            <Text style={styles.loadingText}>Procesez...</Text>
+                          </View>
+                        ) : (
+                          <>
+                            <View style={styles.addImageIcon}>
+                              <ImageIcon size={28} color="#F97316" />
+                            </View>
+                            <Text style={styles.addImageText}>Din galerie</Text>
+                            <Text style={styles.addImageSubtext}>
+                              Selectează din telefon
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </Animated.View>
+                  </>
                 )}
-              </ScrollView>
-            </View>
+              </Animated.View>
+
+              {/* Photo Organization */}
+              {images.length > 1 && (
+                <Animated.View entering={FadeInDown.delay(600)} style={styles.photoOrganization}>
+                  <Text style={styles.organizationTitle}>Organizează fotografiile</Text>
+                  <Text style={styles.organizationSubtitle}>
+                    Ține apăsat și trage pentru a schimba ordinea
+                  </Text>
+                  <View style={styles.photoReorderHint}>
+                    <Text style={styles.reorderHintText}>💡 Prima fotografie va fi afișată ca principală</Text>
+                  </View>
+                </Animated.View>
+              )}
+            </ScrollView>
           </Animated.View>
         );
 
@@ -1300,6 +1501,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  videoContainerFixed: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
   cameraButton: {
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
@@ -1371,7 +1577,7 @@ const styles = StyleSheet.create({
   },
   imagePreview: {
     width: '100%',
-    height: 120,
+    height: ((screenWidth - 60) / 2) * (16 / 9), // Aspect ratio 9:16
     borderRadius: 12,
     backgroundColor: '#1a1a1a',
   },
@@ -1393,7 +1599,7 @@ const styles = StyleSheet.create({
   },
   addImageButton: {
     width: (screenWidth - 60) / 2,
-    height: 120,
+    height: ((screenWidth - 60) / 2) * (16 / 9), // Aspect ratio 9:16
     borderRadius: 12,
     backgroundColor: '#1a1a1a',
     borderWidth: 2,
@@ -1516,31 +1722,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 12,
   },
-  recordingProgressContainer: {
+  recordingStatusContainer: {
     position: 'absolute',
     top: 120,
     left: 20,
-    width: 60,
-    height: 60,
     zIndex: 10,
   },
-  recordingProgressBackground: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    borderWidth: 3,
+  recordingStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: '#EF4444',
-    overflow: 'hidden',
   },
-  recordingProgressFill: {
-    position: 'absolute',
-    top: -30,
-    left: -30,
-    width: 60,
-    height: 60,
-    backgroundColor: '#EF4444',
-    transformOrigin: '30px 30px',
+  recordingStatusPaused: {
+    backgroundColor: 'rgba(249, 115, 22, 0.9)',
+    borderColor: '#F97316',
+  },
+  recordingStatusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#fff',
+    marginLeft: 6,
+  },
+  recordingDotPaused: {
+    backgroundColor: '#F97316',
   },
   cameraGuidelines: {
     position: 'absolute',
@@ -1657,9 +1866,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  pauseButtonText: {
-    fontSize: 16,
-  },
+
   recordingDot: {
     width: 8,
     height: 8,

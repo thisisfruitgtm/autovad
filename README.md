@@ -195,6 +195,31 @@ yarn start
 
 ## 🚀 Latest Technical Improvements
 
+### ⭐ **June 2025 Major Updates**
+
+#### **Camera & Media Processing Improvements**
+- **Hybrid Camera System** ✅ **NEW**
+  - **Photos**: Using stable `ImagePicker.launchCameraAsync()` for crash-free photo capture
+  - **Videos**: Custom `CustomVideoCamera` component with professional UX features
+  - **30-second countdown timer** with real-time progress display
+  - **Visual recording indicators** and camera flip functionality
+  - **Enhanced error handling** and camera ready state management
+
+#### **Image Compression & Portrait Orientation** 🔄 **IN PROGRESS**
+- **Smart image processing** with multi-step compression
+- **Portrait format enforcement** (720x1280 pixels, 9:16 aspect ratio)
+- **Two-stage processing**: High-quality resize → Final compression
+- **Fallback system** for compression failures
+- **EXIF data removal** to prevent orientation issues
+- **Crop validation** with error handling (currently being refined)
+
+#### **Media Upload Optimization**
+- **Intelligent file size management** with automatic compression
+- **Real-time upload progress** tracking
+- **Enhanced logging** for debugging media processing
+- **Supabase storage integration** with proper file naming
+- **Error recovery** with multiple fallback methods
+
 ### ⭐ **December 2024 Major Updates**
 
 #### **Public Access & Database Security**
