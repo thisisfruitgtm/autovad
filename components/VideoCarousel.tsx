@@ -188,7 +188,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="video-carousel">
       <View
         key={currentIndex}
         style={styles.mediaContainer}
@@ -208,6 +208,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
           <Image
             source={{ uri: allMedia[currentIndex] }}
             style={styles.image}
+            testID="carousel-image"
           />
         )}
       </View>
@@ -215,7 +216,11 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
       {/* Video Controls */}
       {isCurrentVideo && currentVideoUrl && (
         <View style={styles.videoControls}>
-          <TouchableOpacity style={styles.controlButton} onPress={togglePlayPause}>
+          <TouchableOpacity 
+            style={styles.controlButton} 
+            onPress={togglePlayPause}
+            testID="play-pause-button"
+          >
             {isPlaying ? (
               <Pause size={24} color="#fff" fill="#fff" />
             ) : (
@@ -223,7 +228,11 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
             )}
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.controlButton} onPress={toggleMute}>
+          <TouchableOpacity 
+            style={styles.controlButton} 
+            onPress={toggleMute}
+            testID="mute-button"
+          >
             {isMuted ? (
               <VolumeX size={24} color="#fff" />
             ) : (
@@ -236,10 +245,18 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
       {/* Navigation Arrows */}
       {allMedia.length > 1 && (
         <>
-          <TouchableOpacity style={styles.leftArrow} onPress={goToPrevious}>
+          <TouchableOpacity 
+            style={styles.leftArrow} 
+            onPress={goToPrevious}
+            testID="left-arrow"
+          >
             <ChevronLeft size={32} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.rightArrow} onPress={goToNext}>
+          <TouchableOpacity 
+            style={styles.rightArrow} 
+            onPress={goToNext}
+            testID="right-arrow"
+          >
             <ChevronRight size={32} color="#fff" />
           </TouchableOpacity>
         </>
@@ -247,7 +264,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
 
       {/* Pagination Dots */}
       {allMedia.length > 1 && (
-        <View style={styles.pagination}>
+        <View style={styles.pagination} testID="pagination">
           {allMedia.map((_, index) => (
             <TouchableOpacity
               key={index}
@@ -260,6 +277,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
                 }
               ]}
               onPress={() => handleDotPress(index)}
+              testID={`pagination-dot-${index}`}
             />
           ))}
         </View>
