@@ -1,4 +1,5 @@
 import { Car } from '@/types/car';
+import { ErrorHandler } from '@/lib/errorHandler';
 
 // Use environment variables for security
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -203,92 +204,104 @@ export class CarService {
   }
 
   static async getCars(userId?: string): Promise<Car[]> {
-    console.log('🚗 CarService: Starting to fetch cars...');
-    console.log('👤 CarService: User ID provided:', userId ? 'Yes' : 'No (unauthenticated)');
-    
-    // Import supabase client directly to avoid REST API caching issues
-    const { supabase } = await import('@/lib/supabase');
-    
-    try {
-      // Use Supabase client instead of REST API to avoid caching issues
-      // Fetch ALL active cars regardless of authentication status
-      const { data, error } = await supabase
-        .from('cars')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(100); // Increased limit to show more cars
-
-      if (error) {
-        throw error;
-      }
-
-      console.log(`✅ CarService: Successfully fetched ${data.length} cars from database`);
+    return await ErrorHandler.measurePerformance(async () => {
+      console.log('🚗 CarService: Starting to fetch cars...');
+      console.log('👤 CarService: User ID provided:', userId ? 'Yes' : 'No (unauthenticated)');
       
-      // Debug: Log the latest cars to see what's being fetched
-      if (data.length > 0) {
-        console.log('🔍 CarService: Latest 3 cars:');
-        data.slice(0, 3).forEach((car: any, index: number) => {
-          console.log(`  ${index + 1}. ${car.make} ${car.model} (${car.created_at}) - Status: ${car.status}`);
-        });
-      }
+      // Import supabase client directly to avoid REST API caching issues
+      const { supabase } = await import('@/lib/supabase');
       
-      // Fetch likes for the user if authenticated
-      let userLikes: string[] = [];
-      if (userId) {
-        try {
-          const { data: likesData, error: likesError } = await supabase
-            .from('likes')
-            .select('car_id')
-            .eq('user_id', userId);
-            
-          if (!likesError && likesData) {
-            userLikes = likesData.map((like: any) => like.car_id);
-            console.log(`✅ CarService: Fetched ${userLikes.length} user likes`);
-          }
-        } catch (error) {
-          console.warn('⚠️ CarService: Failed to fetch user likes, continuing without:', error);
+      try {
+        // Use Supabase client instead of REST API to avoid caching issues
+        // Fetch ALL active cars regardless of authentication status
+        const { data, error } = await supabase
+          .from('cars')
+          .select('*')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(100); // Increased limit to show more cars
+
+        if (error) {
+          throw ErrorHandler.networkError(
+            `Failed to fetch cars: ${error.message}`,
+            { component: 'CarService', action: 'getCars', userId }
+          );
         }
-      }
-      
-      // Transform data to match Car interface with enhanced seller info
-      const transformedCars: Car[] = data.map((car: any) => ({
-        id: car.id,
-        make: car.make,
-        model: car.model,
-        year: car.year,
-        price: car.price,
-        mileage: car.mileage,
-        color: car.color,
-        fuel_type: car.fuel_type,
-        transmission: car.transmission,
-        body_type: car.body_type,
-        videos: car.videos || [],
-        images: car.images || [],
-        description: car.description,
-        location: car.location,
-        status: car.status || 'active',
-        seller: {
-          id: 'autovad-verified',
-          name: 'Autovad Verified',
-          avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
-          rating: 4.9,
-          verified: true,
-        },
-        created_at: car.created_at,
-        is_liked: userId ? userLikes.includes(car.id) : false,
-        likes_count: car.likes_count || Math.floor(Math.random() * 50) + 5,
-        comments_count: car.comments_count || Math.floor(Math.random() * 15) + 1,
-      }));
 
-      return transformedCars;
-      
-    } catch (error) {
-      console.error('❌ CarService: Failed to fetch cars from database:', error);
-      console.log('🎭 CarService: Using enhanced mock data as fallback...');
-      
-      return this.getEnhancedMockCars();
-    }
+        console.log(`✅ CarService: Successfully fetched ${data.length} cars from database`);
+        
+        // Debug: Log the latest cars to see what's being fetched
+        if (data.length > 0) {
+          console.log('🔍 CarService: Latest 3 cars:');
+          data.slice(0, 3).forEach((car: any, index: number) => {
+            console.log(`  ${index + 1}. ${car.make} ${car.model} (${car.created_at}) - Status: ${car.status}`);
+          });
+        }
+        
+        // Fetch likes for the user if authenticated
+        let userLikes: string[] = [];
+        if (userId) {
+          const likesResult = await ErrorHandler.withErrorHandling(
+            async () => {
+              const { data: likesData, error: likesError } = await supabase
+                .from('likes')
+                .select('car_id')
+                .eq('user_id', userId);
+                
+              if (likesError) throw likesError;
+              return likesData?.map((like: any) => like.car_id) || [];
+            },
+            { component: 'CarService', action: 'fetchUserLikes', userId },
+            []
+          );
+          
+          userLikes = likesResult || [];
+          console.log(`✅ CarService: Fetched ${userLikes.length} user likes`);
+        }
+        
+        // Transform data to match Car interface with enhanced seller info
+        const transformedCars: Car[] = data.map((car: any) => ({
+          id: car.id,
+          make: car.make,
+          model: car.model,
+          year: car.year,
+          price: car.price,
+          mileage: car.mileage,
+          color: car.color,
+          fuel_type: car.fuel_type,
+          transmission: car.transmission,
+          body_type: car.body_type,
+          videos: car.videos || [],
+          images: car.images || [],
+          description: car.description,
+          location: car.location,
+          status: car.status || 'active',
+          seller: {
+            id: 'autovad-verified',
+            name: 'Autovad Verified',
+            avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
+            rating: 4.9,
+            verified: true,
+          },
+          created_at: car.created_at,
+          is_liked: userId ? userLikes.includes(car.id) : false,
+          likes_count: car.likes_count || Math.floor(Math.random() * 50) + 5,
+          comments_count: car.comments_count || Math.floor(Math.random() * 15) + 1,
+        }));
+
+        return transformedCars;
+        
+      } catch (error) {
+        // Use ErrorHandler for consistent error logging
+        await ErrorHandler.handle(
+          error as Error,
+          { component: 'CarService', action: 'getCars', userId }
+        );
+        
+        console.log('🎭 CarService: Using enhanced mock data as fallback...');
+        return this.getEnhancedMockCars();
+      }
+    }, 'fetchCars', { component: 'CarService', userId });
   }
 
   static async toggleLike(carId: string, userId: string, isLiked: boolean, accessToken?: string): Promise<boolean> {

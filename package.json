@@ -10,7 +10,11 @@
     "start": "npx expo start",
     "android": "npx expo start --android",
     "ios": "npx expo start --ios",
-    "web": "npx expo start --web"
+    "web": "npx expo start --web",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --watchAll=false"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.2.3",
@@ -57,7 +61,12 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@expo/cli": "^0.24.14",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^13.2.0",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.0.10",
+    "jest": "^30.0.0",
+    "react-test-renderer": "^19.1.0",
     "typescript": "~5.8.3"
   }
 }

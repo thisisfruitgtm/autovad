@@ -160,6 +160,7 @@ export function CarPost({ car, onLike, onComment, onShare, onView, isVisible = t
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => onLike(car.id)}
+              testID="like-button"
             >
               <Heart 
                 size={32} 
@@ -172,6 +173,7 @@ export function CarPost({ car, onLike, onComment, onShare, onView, isVisible = t
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => onComment(car.id)}
+              testID="comment-button"
             >
               <MessageCircle size={32} color="#fff" />
               <Text style={styles.actionText}>{car.comments_count || 0}</Text>
