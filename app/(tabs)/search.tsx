@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -288,46 +288,59 @@ function SearchScreen() {
   // Track if initial load has been completed
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   
-  // Separate state for tracking filter changes to prevent loops
-  const [isFirstRender, setIsFirstRender] = useState(true);
+  // Debounce timer ref to prevent multiple simultaneous calls
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Track previous filters to detect actual changes
+  const prevFiltersRef = useRef(filters);
 
-  // Initial load only - no dependencies to prevent loops
+  // Initial load only - single useEffect, no complex dependencies
   useEffect(() => {
     const loadInitialData = async () => {
-      console.log('🔄 SearchScreen: Loading initial data...');
+      console.log('🔄 SearchScreen: Initial load starting...');
       try {
+        setInitialLoading(true);
         await fetchFilterData();
         await fetchCars(true);
         setHasInitiallyLoaded(true);
-        setIsFirstRender(false);
-        console.log('✅ SearchScreen: Initial data loaded');
+        console.log('✅ SearchScreen: Initial load complete');
       } catch (error) {
-        console.error('❌ SearchScreen: Error loading initial data:', error);
+        console.error('❌ SearchScreen: Initial load error:', error);
+      } finally {
         setInitialLoading(false);
       }
     };
     
     loadInitialData();
-  }, []); // No dependencies - only run once
+    
+    // Cleanup debounce timer on unmount
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []); // Only run once on mount
 
-  // Filter changes - only after initial load, with debouncing
-  useEffect(() => {
-    // Skip first render and only run after initial load
-    if (isFirstRender || !hasInitiallyLoaded) {
-      return;
+  // Manual filter handling with debouncing - no automatic useEffect
+  const handleFilterChange = useCallback((newFilters: SearchFilters) => {
+    // Clear any existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
 
-    console.log('🔍 SearchScreen: Filters changed, applying...', filters);
-    
-    // Debounce filter changes
-    const timeoutId = setTimeout(() => {
-      fetchCars(false);
-    }, 300);
+    // Update filters immediately for UI responsiveness
+    setFilters(newFilters);
 
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [filters.searchQuery, filters.selectedMake, filters.selectedPriceRange, filters.selectedFuelType, filters.selectedLocation]); // Explicit filter dependencies
+    // Only fetch if initial load is complete and filters actually changed
+    if (hasInitiallyLoaded) {
+      console.log('🔍 SearchScreen: Filter changed, debouncing...', newFilters);
+      
+      debounceTimerRef.current = setTimeout(() => {
+        console.log('🔍 SearchScreen: Applying filters after debounce');
+        fetchCars(false);
+      }, 300);
+    }
+  }, [hasInitiallyLoaded]);
 
   const filteredCars = useMemo(() => {
     return cars; // Filtering is done on the server side
@@ -353,7 +366,8 @@ function SearchScreen() {
   );
 
   const updateFilter = (key: keyof SearchFilters, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    const newFilters = { ...filters, [key]: value };
+    handleFilterChange(newFilters);
   };
 
   const handleCarPress = (carId: string) => {
@@ -480,13 +494,14 @@ function SearchScreen() {
               <TouchableOpacity 
                 style={styles.clearFiltersButton}
                 onPress={() => {
-                  setFilters({
+                  const clearedFilters = {
                     searchQuery: '',
                     selectedMake: 'All',
                     selectedPriceRange: 'All',
                     selectedFuelType: 'All',
                     selectedLocation: 'All',
-                  });
+                  };
+                  handleFilterChange(clearedFilters);
                 }}
               >
                 <Text style={styles.clearFiltersText}>Șterge Filtrele</Text>
