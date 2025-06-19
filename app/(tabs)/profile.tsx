@@ -344,13 +344,13 @@ function ProfileScreen() {
               <Car size={48} color="#666" />
               <Text style={styles.emptyListingsText}>Nu ai anunțuri încă</Text>
               <Text style={styles.emptyListingsSubtext}>
-                Postează prima ta mașină pentru a începe să vinzi
+                Adaugă prima ta mașină pentru a începe să vinzi
               </Text>
               <TouchableOpacity 
                 style={styles.postFirstCarButton}
                 onPress={() => router.push('/(tabs)/post')}
               >
-                <Text style={styles.postFirstCarButtonText}>Postează Mașina</Text>
+                <Text style={styles.postFirstCarButtonText}>Adaugă Mașina</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -390,7 +390,7 @@ function ProfileScreen() {
 
           <View style={styles.emptyActivity}>
             <Text style={styles.emptyActivityText}>
-              Postează prima ta mașină pentru a vedea mai multă activitate aici!
+              Adaugă prima ta mașină pentru a vedea mai multă activitate aici!
             </Text>
           </View>
         </View>

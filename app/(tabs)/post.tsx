@@ -1221,7 +1221,7 @@ function PostScreen() {
           <TouchableOpacity onPress={() => currentStep > 0 ? prevStep() : router.back()}>
             <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.title}>Postează mașina</Text>
+          <Text style={styles.title}>Adaugă mașina</Text>
           <View style={{ width: 24 }} />
         </View>
 

@@ -2,7 +2,7 @@ export default {
   navigation: {
     feed: "Feed",
     search: "Căutare",
-    post: "Postează",
+    post: "Adaugă",
     liked: "Favorite",
     profile: "Profil"
   },
