@@ -8,6 +8,8 @@ import {
   Image,
   Alert,
   DeviceEventEmitter,
+  Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -27,6 +29,8 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
+import { useTranslation } from '@/hooks/useTranslation';
+import { mediaOptimizer } from '@/lib/mediaOptimization';
 
 function LikedScreen() {
   const { user, loading: authLoading } = useAuth();
@@ -50,12 +54,17 @@ function LikedScreen() {
         `)
         .eq('user_id', user.id)
         .eq('cars.status', 'active')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(20); // Optimized: 20 cars per request
 
       if (error) throw error;
 
       const transformedCars: Car[] = data.map((like: any) => {
         const car = like.cars;
+        
+        // Optimize media for reduced egress costs
+        const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(car);
+        
         return {
           id: car.id,
           make: car.make,
@@ -67,10 +76,11 @@ function LikedScreen() {
           fuel_type: car.fuel_type,
           transmission: car.transmission,
           body_type: car.body_type,
-          videos: car.videos || [],
-          images: car.images || [],
+          videos: optimizedMedia.videos.map(v => v.url),
+          images: optimizedMedia.images,
           description: car.description,
           location: car.location,
+          status: car.status || 'active',
           seller: car.seller ? {
             id: car.seller.id,
             name: car.seller.name,

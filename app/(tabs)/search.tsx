@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,16 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
-import { Search, Filter, Heart, MapPin } from 'lucide-react-native';
+import { Search, Filter, Heart, MapPin, X, Fuel, Gauge } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Car } from '../../types/car';
+import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from '@/hooks/useTranslation';
+import { mediaOptimizer } from '@/lib/mediaOptimization';
 
 interface FilterOptions {
   makes: string[];
@@ -71,44 +75,50 @@ export default function SearchScreen() {
           likes:likes(user_id)
         `)
         .eq('status', 'active')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(20); // Optimized: 20 cars per request
 
       if (error) throw error;
       // Transform data
-      const transformedCars: Car[] = data.map((car: any) => ({
-        id: car.id,
-        make: car.make,
-        model: car.model,
-        year: car.year,
-        status: car.status,
-        price: car.price,
-        mileage: car.mileage,
-        color: car.color,
-        fuel_type: car.fuel_type,
-        transmission: car.transmission,
-        body_type: car.body_type,
-        videos: car.videos || [],
-        images: car.images || [],
-        description: car.description,
-        location: car.location,
-        seller: car.seller ? {
-          id: car.seller.id,
-          name: car.seller.name,
-          avatar_url: car.seller.avatar_url,
-          rating: car.seller.rating || 0,
-          verified: car.seller.verified || false,
-        } : {
-          id: 'demo-seller',
-          name: 'Autovad Demo',
-          avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
-          rating: 5.0,
-          verified: true,
-        },
-        likes_count: car.likes_count || 0,
-        comments_count: car.comments_count || 0,
-        is_liked: user ? car.likes.some((like: any) => like.user_id === user.id) : false,
-        created_at: car.created_at,
-      }));
+      const transformedCars: Car[] = data.map((car: any) => {
+        // Optimize media for reduced egress costs
+        const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(car);
+        
+        return {
+          id: car.id,
+          make: car.make,
+          model: car.model,
+          year: car.year,
+          status: car.status,
+          price: car.price,
+          mileage: car.mileage,
+          color: car.color,
+          fuel_type: car.fuel_type,
+          transmission: car.transmission,
+          body_type: car.body_type,
+          videos: optimizedMedia.videos.map(v => v.url),
+          images: optimizedMedia.images,
+          description: car.description,
+          location: car.location,
+          seller: car.seller ? {
+            id: car.seller.id,
+            name: car.seller.name,
+            avatar_url: car.seller.avatar_url,
+            rating: car.seller.rating || 0,
+            verified: car.seller.verified || false,
+          } : {
+            id: 'demo-seller',
+            name: 'Autovad Demo',
+            avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
+            rating: 5.0,
+            verified: true,
+          },
+          likes_count: car.likes_count || 0,
+          comments_count: car.comments_count || 0,
+          is_liked: user ? car.likes.some((like: any) => like.user_id === user.id) : false,
+          created_at: car.created_at,
+        };
+      });
 
       setCars(transformedCars);
       setFilteredCars(transformedCars);
@@ -120,20 +130,27 @@ export default function SearchScreen() {
       const bodyTypes = Array.from(new Set(transformedCars.map(car => car.body_type))).sort();
       const locations = Array.from(new Set(transformedCars.map(car => car.location.split(',')[0].trim()))).sort();
 
-      setFilterOptions(prev => ({
-        ...prev,
+      setFilterOptions({
         makes: ['All', ...makes],
         years: ['All', ...years],
         fuelTypes: ['All', ...fuelTypes],
         bodyTypes: ['All', ...bodyTypes],
         locations: ['All', ...locations],
-      }));
-
+        priceRanges: [
+          { label: 'All', min: 0, max: null },
+          { label: 'Sub 25k', min: 0, max: 25000 },
+          { label: '25k - 50k', min: 25000, max: 50000 },
+          { label: '50k - 100k', min: 50000, max: 100000 },
+          { label: '100k - 200k', min: 100000, max: 200000 },
+          { label: 'Peste 200k', min: 200000, max: null },
+        ],
+      });
     } catch (error) {
       console.error('Error fetching cars:', error);
+      setCars([]);
+      setFilteredCars([]);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 

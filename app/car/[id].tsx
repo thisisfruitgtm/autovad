@@ -43,6 +43,7 @@ import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/database';
 import { useAuth } from '@/hooks/useAuth';
 import { logActivity } from '@/lib/analytics';
+import { mediaOptimizer } from '@/lib/mediaOptimization';
 
 const { width } = Dimensions.get('window');
 
@@ -97,12 +98,24 @@ export default function CarDetailsScreen() {
           .eq('car_id', id)
           .single();
 
+        // Optimize media for reduced egress costs
+        const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(carData);
+        
         setCar({
           ...carData,
+          images: optimizedMedia.images,
+          videos: optimizedMedia.videos.map(v => v.url),
           is_liked: !!likeData,
         });
       } else {
-        setCar(carData);
+        // Optimize media for reduced egress costs
+        const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(carData);
+        
+        setCar({
+          ...carData,
+          images: optimizedMedia.images,
+          videos: optimizedMedia.videos.map(v => v.url),
+        });
       }
     } catch (error) {
       console.error('Error fetching car details:', error);

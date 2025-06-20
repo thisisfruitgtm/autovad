@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX } from 'lucide-react-native';
+import { mediaOptimizer } from '@/lib/mediaOptimization';
+import { useLazyMedia, useLazyVideo } from '@/hooks/useLazyMedia';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,11 +25,16 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   
-  const allMedia = [...videos, ...images];
-  const isCurrentVideo = currentIndex < videos.length;
-  const currentVideoUrl = isCurrentVideo ? allMedia[currentIndex] : null;
+  // Lazy load media for reduced egress costs
+  const { media: optimizedImages, isLoading: imagesLoading } = useLazyMedia(images, isVisible);
+  const { videos: optimizedVideos, isLoading: videosLoading } = useLazyVideo(videos, isVisible);
   
-  // Create video player
+  const allMedia = [...optimizedVideos.map(v => v.url), ...optimizedImages];
+  const isCurrentVideo = currentIndex < optimizedVideos.length;
+  const currentVideoUrl = isCurrentVideo ? allMedia[currentIndex] : null;
+  const currentVideoPoster = isCurrentVideo ? optimizedVideos[currentIndex]?.poster : null;
+  
+  // Create video player with optimized poster
   const player = useVideoPlayer(currentVideoUrl || '', (player) => {
     if (currentVideoUrl && isVisible) {
       player.loop = true;
@@ -41,8 +48,8 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   const nextIndex = currentIndex < allMedia.length - 1 ? currentIndex + 1 : 0;
   const prevIndex = currentIndex > 0 ? currentIndex - 1 : allMedia.length - 1;
   
-  const nextVideoUrl = nextIndex < videos.length ? allMedia[nextIndex] : null;
-  const prevVideoUrl = prevIndex < videos.length ? allMedia[prevIndex] : null;
+  const nextVideoUrl = nextIndex < optimizedVideos.length ? allMedia[nextIndex] : null;
+  const prevVideoUrl = prevIndex < optimizedVideos.length ? allMedia[prevIndex] : null;
   
   const nextPlayer = useVideoPlayer(nextVideoUrl || '', (player) => {
     if (nextVideoUrl) {
@@ -161,7 +168,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
     
     // Update all states simultaneously for maximum speed
     setCurrentIndex(newIndex);
-    if (newIndex < videos.length) {
+    if (newIndex < optimizedVideos.length) {
       setIsMuted(false);
       setIsPlaying(true);
     }
@@ -172,7 +179,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
     
     // Update all states simultaneously for maximum speed
     setCurrentIndex(newIndex);
-    if (newIndex < videos.length) {
+    if (newIndex < optimizedVideos.length) {
       setIsMuted(false);
       setIsPlaying(true);
     }
@@ -181,7 +188,7 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   const handleDotPress = (index: number) => {
     // Update all states simultaneously for maximum speed
     setCurrentIndex(index);
-    if (index < videos.length) {
+    if (index < optimizedVideos.length) {
       setIsMuted(false);
       setIsPlaying(true);
     }
@@ -272,8 +279,8 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
                 styles.dot,
                 { 
                   backgroundColor: index === currentIndex ? '#F97316' : 'rgba(255, 255, 255, 0.5)',
-                  width: index < videos.length ? 8 : 6,
-                  height: index < videos.length ? 8 : 6,
+                  width: index < optimizedVideos.length ? 8 : 6,
+                  height: index < optimizedVideos.length ? 8 : 6,
                 }
               ]}
               onPress={() => handleDotPress(index)}

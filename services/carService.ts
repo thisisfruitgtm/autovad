@@ -1,5 +1,6 @@
 import { Car } from '@/types/car';
 import { ErrorHandler } from '@/lib/errorHandler';
+import { mediaOptimizer } from '@/lib/mediaOptimization';
 
 // Use environment variables for security
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -157,7 +158,8 @@ export class CarService {
         .select('*')
         .eq('seller_id', userId)
         .eq('status', 'active')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(20); // Optimized: 20 cars per request
 
       if (error) {
         throw error;
@@ -165,35 +167,40 @@ export class CarService {
 
       console.log(`✅ CarService: Successfully fetched ${data.length} user cars`);
       
-      // Transform data to match Car interface
-      const transformedCars: Car[] = data.map((car: any) => ({
-        id: car.id,
-        make: car.make,
-        model: car.model,
-        year: car.year,
-        price: car.price,
-        mileage: car.mileage,
-        color: car.color,
-        fuel_type: car.fuel_type,
-        transmission: car.transmission,
-        body_type: car.body_type,
-        videos: car.videos || [],
-        images: car.images || [],
-        description: car.description,
-        location: car.location,
-        status: car.status || 'active',
-        seller: {
-          id: userId,
-          name: 'Tine',
-          avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
-          rating: 5.0,
-          verified: true,
-        },
-        created_at: car.created_at,
-        is_liked: false,
-        likes_count: car.likes_count || 0,
-        comments_count: car.comments_count || 0,
-      }));
+      // Transform data to match Car interface with optimized media
+      const transformedCars: Car[] = data.map((car: any) => {
+        // Optimize media for reduced egress costs
+        const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(car);
+        
+        return {
+          id: car.id,
+          make: car.make,
+          model: car.model,
+          year: car.year,
+          price: car.price,
+          mileage: car.mileage,
+          color: car.color,
+          fuel_type: car.fuel_type,
+          transmission: car.transmission,
+          body_type: car.body_type,
+          videos: optimizedMedia.videos.map(v => v.url),
+          images: optimizedMedia.images,
+          description: car.description,
+          location: car.location,
+          status: car.status || 'active',
+          seller: {
+            id: userId,
+            name: 'Tine',
+            avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
+            rating: 5.0,
+            verified: true,
+          },
+          created_at: car.created_at,
+          is_liked: false,
+          likes_count: car.likes_count || 0,
+          comments_count: car.comments_count || 0,
+        };
+      });
 
       return transformedCars;
       
@@ -219,7 +226,7 @@ export class CarService {
           .select('*')
           .eq('status', 'active')
           .order('created_at', { ascending: false })
-          .limit(100); // Increased limit to show more cars
+          .limit(20); // Optimized: 20 cars per request (80% egress reduction)
 
         if (error) {
           throw ErrorHandler.networkError(
@@ -259,47 +266,46 @@ export class CarService {
           console.log(`✅ CarService: Fetched ${userLikes.length} user likes`);
         }
         
-        // Transform data to match Car interface with enhanced seller info
-        const transformedCars: Car[] = data.map((car: any) => ({
-          id: car.id,
-          make: car.make,
-          model: car.model,
-          year: car.year,
-          price: car.price,
-          mileage: car.mileage,
-          color: car.color,
-          fuel_type: car.fuel_type,
-          transmission: car.transmission,
-          body_type: car.body_type,
-          videos: car.videos || [],
-          images: car.images || [],
-          description: car.description,
-          location: car.location,
-          status: car.status || 'active',
-          seller: {
-            id: 'autovad-verified',
-            name: 'Autovad Verified',
-            avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
-            rating: 4.9,
-            verified: true,
-          },
-          created_at: car.created_at,
-          is_liked: userId ? userLikes.includes(car.id) : false,
-          likes_count: car.likes_count || Math.floor(Math.random() * 50) + 5,
-          comments_count: car.comments_count || Math.floor(Math.random() * 15) + 1,
-        }));
+        // Transform data to match Car interface with enhanced seller info and optimized media
+        const transformedCars: Car[] = data.map((car: any) => {
+          // Optimize media for reduced egress costs
+          const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(car);
+          
+          return {
+            id: car.id,
+            make: car.make,
+            model: car.model,
+            year: car.year,
+            price: car.price,
+            mileage: car.mileage,
+            color: car.color,
+            fuel_type: car.fuel_type,
+            transmission: car.transmission,
+            body_type: car.body_type,
+            videos: optimizedMedia.videos.map(v => v.url), // Use optimized video URLs
+            images: optimizedMedia.images, // Use optimized image URLs
+            description: car.description,
+            location: car.location,
+            status: car.status || 'active',
+            seller: {
+              id: 'autovad-verified',
+              name: 'Autovad Verified',
+              avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
+              rating: 4.9,
+              verified: true,
+            },
+            created_at: car.created_at,
+            is_liked: userId ? userLikes.includes(car.id) : false,
+            likes_count: car.likes_count || Math.floor(Math.random() * 50) + 5,
+            comments_count: car.comments_count || Math.floor(Math.random() * 15) + 1,
+          };
+        });
 
         return transformedCars;
         
       } catch (error) {
-        // Use ErrorHandler for consistent error logging
-        await ErrorHandler.handle(
-          error as Error,
-          { component: 'CarService', action: 'getCars', userId }
-        );
-        
-        console.log('🎭 CarService: Using enhanced mock data as fallback...');
-        return this.getEnhancedMockCars();
+        console.error('❌ CarService: Failed to fetch cars:', error);
+        return [];
       }
     }, 'fetchCars', { component: 'CarService', userId });
   }
