@@ -19,6 +19,7 @@ import { Car } from '../../types/car';
 
 interface FilterOptions {
   makes: string[];
+  years: string[];
   fuelTypes: string[];
   bodyTypes: string[];
   locations: string[];
@@ -36,6 +37,7 @@ export default function SearchScreen() {
   
   // Filter states
   const [selectedMake, setSelectedMake] = useState<string>('All');
+  const [selectedYear, setSelectedYear] = useState<string>('All');
   const [selectedFuelType, setSelectedFuelType] = useState<string>('All');
   const [selectedBodyType, setSelectedBodyType] = useState<string>('All');
   const [selectedLocation, setSelectedLocation] = useState<string>('All');
@@ -44,6 +46,7 @@ export default function SearchScreen() {
   // Filter options
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     makes: ['All'],
+    years: ['All'],
     fuelTypes: ['All'],
     bodyTypes: ['All'],
     locations: ['All'],
@@ -71,13 +74,13 @@ export default function SearchScreen() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-
       // Transform data
       const transformedCars: Car[] = data.map((car: any) => ({
         id: car.id,
         make: car.make,
         model: car.model,
         year: car.year,
+        status: car.status,
         price: car.price,
         mileage: car.mileage,
         color: car.color,
@@ -112,6 +115,7 @@ export default function SearchScreen() {
 
       // Generate filter options from data
       const makes = Array.from(new Set(transformedCars.map(car => car.make))).sort();
+      const years = Array.from(new Set(transformedCars.map(car => car.year.toString()))).sort((a, b) => parseInt(b) - parseInt(a));
       const fuelTypes = Array.from(new Set(transformedCars.map(car => car.fuel_type))).sort();
       const bodyTypes = Array.from(new Set(transformedCars.map(car => car.body_type))).sort();
       const locations = Array.from(new Set(transformedCars.map(car => car.location.split(',')[0].trim()))).sort();
@@ -119,6 +123,7 @@ export default function SearchScreen() {
       setFilterOptions(prev => ({
         ...prev,
         makes: ['All', ...makes],
+        years: ['All', ...years],
         fuelTypes: ['All', ...fuelTypes],
         bodyTypes: ['All', ...bodyTypes],
         locations: ['All', ...locations],
@@ -149,6 +154,11 @@ export default function SearchScreen() {
     // Make filter
     if (selectedMake !== 'All') {
       filtered = filtered.filter(car => car.make === selectedMake);
+    }
+
+    // Year filter
+    if (selectedYear !== 'All') {
+      filtered = filtered.filter(car => car.year.toString() === selectedYear);
     }
 
     // Fuel type filter
@@ -216,6 +226,7 @@ export default function SearchScreen() {
   const clearFilters = () => {
     setSearchQuery('');
     setSelectedMake('All');
+    setSelectedYear('All');
     setSelectedFuelType('All');
     setSelectedBodyType('All');
     setSelectedLocation('All');
@@ -229,7 +240,7 @@ export default function SearchScreen() {
 
   useEffect(() => {
     applyFilters();
-  }, [searchQuery, selectedMake, selectedFuelType, selectedBodyType, selectedLocation, selectedPriceRange, cars]);
+  }, [searchQuery, selectedMake, selectedYear, selectedFuelType, selectedBodyType, selectedLocation, selectedPriceRange, cars]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -340,6 +351,23 @@ export default function SearchScreen() {
                   title={item}
                   selected={selectedMake === item}
                   onPress={() => setSelectedMake(item)}
+                />
+              )}
+            />
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>An</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={filterOptions.years}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <FilterButton
+                  title={item}
+                  selected={selectedYear === item}
+                  onPress={() => setSelectedYear(item)}
                 />
               )}
             />

@@ -41,7 +41,8 @@
           "microphonePermission": "Allow AutoVad to access your microphone",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import '../lib/i18n'; // Initialize i18n
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
+import { posthog } from '@/lib/posthog';
 
 SplashScreen.preventAutoHideAsync();
 
