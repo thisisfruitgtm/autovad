@@ -118,6 +118,11 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Google OAuth Configuration
 EXPO_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
+
+# Mux Video Streaming (Production)
+MUX_ACCESS_TOKEN_ID=your_mux_access_token_id
+MUX_SECRET_KEY=your_mux_secret_key
+EXPO_PUBLIC_API_URL=https://autovad.vercel.app
 ```
 
 4. Configure Google OAuth:
@@ -206,6 +211,47 @@ yarn start
 ## 🚀 Latest Technical Improvements
 
 ### ⭐ **June 2025 Major Updates**
+
+#### **🎬 Advanced Video Streaming with Mux/HLS** ✅ **NEW**
+- **Professional Video Infrastructure** ✅ **COMPLETE**
+  - **Mux Integration**: Enterprise-grade video streaming platform
+  - **HLS (HTTP Live Streaming)**: Industry-standard adaptive streaming
+  - **Automatic Transcoding**: MP4 → HLS with multiple quality levels
+  - **Thumbnail Generation**: Automatic video thumbnails from Mux
+  - **Webhook Integration**: Real-time asset status updates
+
+#### **Video Upload & Processing Flow**
+```typescript
+// 1. Upload to Mux via direct upload URL
+const { url, uploadId } = await fetch('/api/mux-upload').json();
+await fetch(url, { method: 'PUT', body: videoBlob });
+
+// 2. Poll for asset readiness
+const { playbackId, assetId } = await pollMuxAsset(uploadId);
+
+// 3. Save to database with asset mapping
+await supabase.from('cars').insert({
+  videos: [playbackId],
+  asset_ids: [assetId], // For webhook mapping
+});
+
+// 4. Webhook updates playback_id & thumbnail_url
+// Mux → /api/mux-webhook → Database update
+```
+
+#### **Database Schema Enhancements**
+```sql
+-- New columns for Mux integration
+ALTER TABLE cars ADD COLUMN playback_id text;
+ALTER TABLE cars ADD COLUMN thumbnail_url text;
+ALTER TABLE cars ADD COLUMN asset_ids text[] DEFAULT '{}';
+```
+
+#### **Cross-Platform Video Player**
+- **Web**: Custom HLS player with hls.js
+- **Mobile**: Expo VideoView with HLS support
+- **Features**: Hover-to-play, custom controls, fullscreen
+- **Performance**: Adaptive bitrate streaming
 
 #### **Camera & Media Processing Improvements**
 - **Hybrid Camera System** ✅ **NEW**
@@ -508,6 +554,11 @@ Make sure your `.env` file includes:
 EXPO_PUBLIC_SUPABASE_URL=https://mktfybjfxzhvpmnepshq.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 EXPO_PUBLIC_API_URL=https://mktfybjfxzhvpmnepshq.supabase.co
+
+# Mux Video Streaming (Production)
+MUX_ACCESS_TOKEN_ID=your_mux_access_token_id
+MUX_SECRET_KEY=your_mux_secret_key
+EXPO_PUBLIC_API_URL=https://autovad.vercel.app
 ```
 
 ### Common Developer Issues

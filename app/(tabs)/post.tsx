@@ -421,6 +421,58 @@ function StepProgress({ currentStep, totalSteps }: { currentStep: number; totalS
   );
 }
 
+const uploadVideoToMux = async (uri: string): Promise<{ playbackId: string; assetId: string }> => {
+  try {
+    // 1. Cere URL de upload de la backend
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://autovad.vercel.app';
+    const res = await fetch(`${apiUrl}/api/mux-upload`, { method: 'POST' });
+    const { url, uploadId } = await res.json();
+    if (!url) throw new Error('Nu s-a putut obține URL-ul de upload Mux');
+
+    // 2. Upload video către Mux
+    const fileRes = await fetch(uri);
+    const blob = await fileRes.blob();
+    const uploadRes = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'video/mp4' },
+      body: blob,
+    });
+    if (!uploadRes.ok) throw new Error('Upload video către Mux a eșuat');
+
+    // 3. Polling pentru asset gata (simplu, demo)
+    let playbackId = '';
+    let assetId = '';
+    for (let i = 0; i < 30; i++) { // max 30s
+      await new Promise(r => setTimeout(r, 1000));
+      const statusRes = await fetch(`https://api.mux.com/video/v1/uploads/${uploadId}`, {
+        headers: {
+          Authorization: 'Basic ' + btoa(`${process.env.MUX_ACCESS_TOKEN_ID}:${process.env.MUX_SECRET_KEY}`),
+        },
+      });
+      const statusData = await statusRes.json();
+      if (statusData.data && statusData.data.asset_id) {
+        assetId = statusData.data.asset_id;
+        // Obține playbackId
+        const assetRes = await fetch(`https://api.mux.com/video/v1/assets/${assetId}`, {
+          headers: {
+            Authorization: 'Basic ' + btoa(`${process.env.MUX_ACCESS_TOKEN_ID}:${process.env.MUX_SECRET_KEY}`),
+          },
+        });
+        const assetData = await assetRes.json();
+        if (assetData.data && assetData.data.playback_ids && assetData.data.playback_ids.length > 0) {
+          playbackId = assetData.data.playback_ids[0].id;
+          break;
+        }
+      }
+    }
+    if (!playbackId || !assetId) throw new Error('Nu s-a putut obține playbackId sau assetId de la Mux');
+    return { playbackId, assetId };
+  } catch (error) {
+    Alert.alert('Eroare upload Mux', error instanceof Error ? error.message : 'Eroare necunoscută');
+    throw error;
+  }
+};
+
 function PostScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -730,7 +782,7 @@ function PostScreen() {
 
       // Upload video
       setUploadStatus('Se încarcă video-ul...');
-      const uploadedVideo = await uploadMedia(videoUri, 'video');
+      const { playbackId, assetId } = await uploadVideoToMux(videoUri);
       completedSteps++;
       setUploadProgress((completedSteps / totalSteps) * 100);
       
@@ -766,8 +818,9 @@ function PostScreen() {
           fuel_type: formData.fuelType as any,
           transmission: formData.transmission as any,
           body_type: formData.bodyType as any,
-          videos: [uploadedVideo],
+          videos: [playbackId],
           images: uploadedImages,
+          asset_ids: [assetId],
           description: formData.description,
           location: formData.location,
           seller_id: user.id,
@@ -1858,15 +1911,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     alignItems: 'center',
   },
-  pauseButton: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-
   recordingDot: {
     width: 8,
     height: 8,
