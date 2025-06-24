@@ -18,14 +18,15 @@ interface VideoCarouselProps {
   videos: string[];
   images?: string[];
   isVisible?: boolean;
+  autoPlay?: boolean;
 }
 
-export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCarouselProps) {
+export function VideoCarousel({ videos, images = [], isVisible = true, autoPlay = true }: VideoCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isMuted, setIsMuted] = useState(false);
   
-  // Lazy load media for reduced egress costs
+  // Lazy load media for reduced egress costs - but with immediate loading for current item
   const { media: optimizedImages, isLoading: imagesLoading } = useLazyMedia(images, isVisible);
   const { videos: optimizedVideos, isLoading: videosLoading } = useLazyVideo(videos, isVisible);
   
@@ -36,15 +37,13 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   
   // Create video player with optimized poster
   const player = useVideoPlayer(currentVideoUrl || '', (player) => {
-    if (currentVideoUrl && isVisible) {
+    if (currentVideoUrl && isVisible && autoPlay && isPlaying) {
       player.loop = true;
       player.muted = isMuted;
-      // Auto-play when video loads - completely synchronous
-      player.play();
     }
   });
 
-  // Preload and pre-play next/previous videos for instant switching
+  // Preload next/previous videos but don't auto-play them
   const nextIndex = currentIndex < allMedia.length - 1 ? currentIndex + 1 : 0;
   const prevIndex = currentIndex > 0 ? currentIndex - 1 : allMedia.length - 1;
   
@@ -54,76 +53,48 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   const nextPlayer = useVideoPlayer(nextVideoUrl || '', (player) => {
     if (nextVideoUrl) {
       player.loop = true;
-      player.muted = false;
-      // Start playing in background for instant switching
-      player.play();
+      player.muted = true;
     }
   });
 
   const prevPlayer = useVideoPlayer(prevVideoUrl || '', (player) => {
     if (prevVideoUrl) {
       player.loop = true;
-      player.muted = false;
-      // Start playing in background for instant switching  
-      player.play();
+      player.muted = true;
     }
   });
 
-  // Auto-play when video changes or visibility changes
+  // Handle visibility changes and current video state
   useEffect(() => {
-    if (player && isCurrentVideo && currentVideoUrl && isVisible) {
-      // Completely synchronous play - no delays
+    if (player && isCurrentVideo && currentVideoUrl) {
       try {
         player.muted = isMuted;
-        player.play();
-        setIsPlaying(true);
-      } catch (error) {
-        console.log('Error starting video:', error);
-      }
-    } else if (player && ((!isCurrentVideo) || !isVisible)) {
-      try {
-        player.pause();
-        if (!isVisible) {
-          player.muted = true; // Mute when not visible to stop all audio
+        if (isPlaying && isVisible && autoPlay) {
+          player.play();
+        } else {
+          player.pause();
         }
-        setIsPlaying(false);
       } catch (error) {
-        console.log('Error pausing video:', error);
+        console.log('Error controlling video:', error);
       }
     }
 
-    // Also pause/play background preloaded videos based on visibility
+    // Pause background videos when not visible
     if (!isVisible) {
       try {
         if (nextPlayer) {
           nextPlayer.pause();
-          nextPlayer.muted = true; // Mute when not visible
+          nextPlayer.muted = true;
         }
         if (prevPlayer) {
           prevPlayer.pause();
-          prevPlayer.muted = true; // Mute when not visible
+          prevPlayer.muted = true;
         }
       } catch (error) {
         console.log('Error pausing background videos:', error);
       }
-    } else {
-      // Only resume background videos if we're visible and on main video
-      if (isCurrentVideo) {
-        try {
-          if (nextPlayer) {
-            nextPlayer.muted = false; // Unmute when visible
-            nextPlayer.play();
-          }
-          if (prevPlayer) {
-            prevPlayer.muted = false; // Unmute when visible
-            prevPlayer.play();
-          }
-        } catch (error) {
-          console.log('Error resuming background videos:', error);
-        }
-      }
     }
-  }, [currentIndex, currentVideoUrl, isCurrentVideo, player, isVisible, nextPlayer, prevPlayer]);
+  }, [currentIndex, currentVideoUrl, isCurrentVideo, player, isVisible, isPlaying, autoPlay, nextPlayer, prevPlayer]);
 
   // Update mute state
   useEffect(() => {
@@ -166,32 +137,50 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
   const goToPrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : allMedia.length - 1;
     
-    // Update all states simultaneously for maximum speed
-    setCurrentIndex(newIndex);
-    if (newIndex < optimizedVideos.length) {
-      setIsMuted(false);
-      setIsPlaying(true);
+    // Pause current video before switching
+    if (player && isCurrentVideo) {
+      try {
+        player.pause();
+      } catch (error) {
+        console.log('Error pausing video:', error);
+      }
     }
+    
+    // Update states - don't auto-play
+    setCurrentIndex(newIndex);
+    setIsPlaying(false);
   };
 
   const goToNext = () => {
     const newIndex = currentIndex < allMedia.length - 1 ? currentIndex + 1 : 0;
     
-    // Update all states simultaneously for maximum speed
-    setCurrentIndex(newIndex);
-    if (newIndex < optimizedVideos.length) {
-      setIsMuted(false);
-      setIsPlaying(true);
+    // Pause current video before switching
+    if (player && isCurrentVideo) {
+      try {
+        player.pause();
+      } catch (error) {
+        console.log('Error pausing video:', error);
+      }
     }
+    
+    // Update states - don't auto-play
+    setCurrentIndex(newIndex);
+    setIsPlaying(false);
   };
 
   const handleDotPress = (index: number) => {
-    // Update all states simultaneously for maximum speed
-    setCurrentIndex(index);
-    if (index < optimizedVideos.length) {
-      setIsMuted(false);
-      setIsPlaying(true);
+    // Pause current video before switching
+    if (player && isCurrentVideo) {
+      try {
+        player.pause();
+      } catch (error) {
+        console.log('Error pausing video:', error);
+      }
     }
+    
+    // Update states - don't auto-play
+    setCurrentIndex(index);
+    setIsPlaying(false);
   };
 
   return (
@@ -212,11 +201,22 @@ export function VideoCarousel({ videos, images = [], isVisible = true }: VideoCa
             nativeControls={false}
           />
         ) : (
-          <Image
-            source={{ uri: allMedia[currentIndex] }}
-            style={styles.image}
-            testID="carousel-image"
-          />
+          <>
+            {imagesLoading ? (
+              <View style={styles.loadingContainer}>
+                <View style={styles.loadingSpinner} />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: allMedia[currentIndex] }}
+                style={styles.image}
+                testID="carousel-image"
+                onLoadStart={() => console.log('Image loading started')}
+                onLoadEnd={() => console.log('Image loaded')}
+                onError={(error) => console.log('Image load error:', error)}
+              />
+            )}
+          </>
         )}
       </View>
 
@@ -359,5 +359,20 @@ const styles = StyleSheet.create({
   dot: {
     borderRadius: 3,
     marginHorizontal: 2,
+  },
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingSpinner: {
+    width: 40,
+    height: 40,
+    borderWidth: 4,
+    borderColor: '#fff',
+    borderRadius: 20,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
   },
 });

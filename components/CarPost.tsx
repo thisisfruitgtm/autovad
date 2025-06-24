@@ -27,9 +27,10 @@ interface CarPostProps {
   onShare: (carId: string) => void;
   onView?: (carId: string) => void;
   isVisible?: boolean;
+  autoPlay?: boolean;
 }
 
-export function CarPost({ car, onLike, onComment, onShare, onView, isVisible = true }: CarPostProps) {
+export function CarPost({ car, onLike, onComment, onShare, onView, isVisible = true, autoPlay = true }: CarPostProps) {
   const [showFullDescription, setShowFullDescription] = useState(false);
   const { t, currentLanguage } = useTranslation();
 
@@ -64,7 +65,7 @@ export function CarPost({ car, onLike, onComment, onShare, onView, isVisible = t
 
   return (
     <View style={styles.container}>
-      <VideoCarousel videos={car.videos} images={car.images} isVisible={isVisible} />
+      <VideoCarousel videos={car.videos} images={car.images} isVisible={isVisible} autoPlay={autoPlay} />
       
       {/* Overlay Content */}
       <View style={styles.overlay}>

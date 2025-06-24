@@ -282,6 +282,7 @@ function Feed() {
         images: item.images || [],
         description: item.description,
         location: item.location,
+        status: item.status || 'active',
         seller: item.seller,
         likes_count: item.likes_count,
         comments_count: item.comments_count,
@@ -293,6 +294,7 @@ function Feed() {
       onShare={handleShare}
       onView={handleCarView}
       isVisible={index === currentVisibleIndex && isTabFocused}
+      autoPlay={true}
     />
   ), [currentVisibleIndex, isTabFocused, handleLike, handleComment, handleShare, handleCarView]);
 
@@ -446,11 +448,6 @@ function Feed() {
           </View>
         </View>
       </Modal>
-
-
-
-
-      
     </View>
   );
 }

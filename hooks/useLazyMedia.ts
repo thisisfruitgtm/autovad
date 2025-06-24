@@ -33,15 +33,11 @@ export function useLazyMedia(
         ? mediaOptimizer.optimizeImageArray(mediaUrls, 'preview')
         : mediaUrls;
 
-      // Simulate loading delay for better UX
-      const loadTimer = setTimeout(() => {
-        setLoadedMedia(optimizedUrls);
-        setHasLoaded(true);
-        setIsLoading(false);
-        loadingRef.current = false;
-      }, 100);
-
-      return () => clearTimeout(loadTimer);
+      // Load immediately without artificial delay
+      setLoadedMedia(optimizedUrls);
+      setHasLoaded(true);
+      setIsLoading(false);
+      loadingRef.current = false;
     }
   }, [isVisible, hasLoaded, mediaUrls, enableOptimization]);
 
@@ -86,15 +82,11 @@ export function useLazyVideo(
         ? mediaOptimizer.optimizeVideoArray(videoUrls)
         : videoUrls.map(url => ({ url, poster: '' }));
 
-      // Simulate loading delay for better UX
-      const loadTimer = setTimeout(() => {
-        setLoadedVideos(optimizedVideos);
-        setHasLoaded(true);
-        setIsLoading(false);
-        loadingRef.current = false;
-      }, 100);
-
-      return () => clearTimeout(loadTimer);
+      // Load immediately without artificial delay
+      setLoadedVideos(optimizedVideos);
+      setHasLoaded(true);
+      setIsLoading(false);
+      loadingRef.current = false;
     }
   }, [isVisible, hasLoaded, videoUrls, enableOptimization]);
 

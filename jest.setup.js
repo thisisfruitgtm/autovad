@@ -31,6 +31,7 @@ jest.mock('react-native', () => {
     StyleSheet: {
       create: jest.fn((styles) => styles),
       absoluteFillObject: {},
+      flatten: jest.fn((style) => style),
     },
   };
 });
@@ -111,16 +112,19 @@ jest.mock('expo-linear-gradient', () => ({
 
 jest.mock('react-native-reanimated', () => {
   const Reanimated = require('react-native-reanimated/mock');
-  
-  // Mock specific animations
-  Reanimated.FadeInDown = {
-    delay: jest.fn(() => Reanimated.FadeInDown),
+  // Mock all exported hooks and components
+  return {
+    ...Reanimated,
+    useSharedValue: jest.fn(() => ({ value: 0 })),
+    useAnimatedStyle: jest.fn(() => ({})),
+    withSpring: jest.fn((v) => v),
+    withTiming: jest.fn((v) => v),
+    withDelay: jest.fn((_, v) => v),
+    Easing: { linear: jest.fn() },
+    FadeInDown: { delay: jest.fn(() => ({})) },
+    FadeInUp: { delay: jest.fn(() => ({})) },
+    // Add any other animation mocks as needed
   };
-  Reanimated.FadeInUp = {
-    delay: jest.fn(() => Reanimated.FadeInUp),
-  };
-  
-  return Reanimated;
 });
 
 jest.mock('lucide-react-native', () => ({
@@ -149,8 +153,8 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock Supabase
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
+jest.mock('@/lib/supabase', () => ({
+  supabase: {
     auth: {
       getUser: jest.fn(() => Promise.resolve({ 
         data: { user: null }, 
@@ -204,20 +208,20 @@ jest.mock('@supabase/supabase-js', () => ({
           error: null 
         })),
       })),
+      upsert: jest.fn(() => Promise.resolve({ 
+        data: null, 
+        error: null 
+      })),
     })),
-    storage: {
-      from: jest.fn(() => ({
-        upload: jest.fn(() => Promise.resolve({ 
-          data: { path: 'test-path' }, 
-          error: null 
-        })),
-        getPublicUrl: jest.fn(() => ({ 
-          data: { publicUrl: 'https://test-url.com/image.jpg' } 
+    channel: jest.fn(() => ({
+      on: jest.fn(() => ({
+        subscribe: jest.fn(() => ({
+          unsubscribe: jest.fn(),
         })),
       })),
-    },
-  })),
-}));
+    })),
+  },
+}), { virtual: true });
 
 // Mock i18next
 jest.mock('react-i18next', () => ({
@@ -265,4 +269,98 @@ console.warn = (...args) => {
     return;
   }
   originalWarn.call(console, ...args);
-}; 
+};
+
+jest.mock('expo-auth-session', () => ({
+  makeRedirectUri: jest.fn(() => 'test://redirect'),
+  useAuthRequest: jest.fn(() => [
+    { url: 'test://auth' },
+    { type: 'success' },
+    jest.fn(),
+  ]),
+  AuthRequest: jest.fn(),
+  AuthSessionResult: jest.fn(),
+}));
+
+jest.mock('expo-modules-core', () => ({
+  NativeModule: jest.fn(),
+  EventEmitter: jest.fn(),
+  requireNativeModule: jest.fn(() => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    seek: jest.fn(),
+    setVolume: jest.fn(),
+    setMuted: jest.fn(),
+    setLooping: jest.fn(),
+    setPlaybackRate: jest.fn(),
+    getStatusAsync: jest.fn(() => Promise.resolve({ isLoaded: true, isPlaying: false })),
+    loadAsync: jest.fn(() => Promise.resolve()),
+  })),
+}));
+
+jest.mock('expo-video', () => ({
+  VideoView: 'VideoView',
+  useVideoPlayer: jest.fn(() => ({
+    ref: { current: null },
+    play: jest.fn(),
+    pause: jest.fn(),
+    seek: jest.fn(),
+    setVolume: jest.fn(),
+    setMuted: jest.fn(),
+    setLooping: jest.fn(),
+    setPlaybackRate: jest.fn(),
+    getStatusAsync: jest.fn(() => Promise.resolve({ isLoaded: true, isPlaying: false })),
+    loadAsync: jest.fn(() => Promise.resolve()),
+  })),
+}));
+
+// Mock custom hooks
+jest.mock('@/hooks/useLazyMedia', () => ({
+  useLazyMedia: jest.fn(() => ({
+    isLoaded: true,
+    load: jest.fn(),
+  })),
+  useLazyVideo: jest.fn(() => ({
+    isLoaded: true,
+    load: jest.fn(),
+  })),
+}));
+
+jest.mock('@/hooks/useTranslation', () => ({
+  useTranslation: () => ({
+    t: (key) => key,
+    currentLanguage: 'en',
+  }),
+}));
+
+jest.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: null,
+    session: null,
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+    loading: false,
+  }),
+}));
+
+jest.mock('@/hooks/useCars', () => ({
+  useCars: () => ({
+    cars: [],
+    loading: false,
+    error: null,
+    likeCar: jest.fn(),
+    unlikeCar: jest.fn(),
+    refreshCars: jest.fn(),
+  }),
+}));
+
+jest.mock('react-native-reanimated/src/reanimated2/NativeReanimatedModule', () => ({
+  native: true,
+  installCoreFunctions: jest.fn(),
+  get: jest.fn(),
+}), { virtual: true });
+jest.mock('react-native-reanimated/src/specs/NativeReanimatedModule', () => ({
+  native: true,
+  installCoreFunctions: jest.fn(),
+  get: jest.fn(),
+}), { virtual: true }); 
