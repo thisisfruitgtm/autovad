@@ -25,7 +25,7 @@ export class MediaOptimizer {
   }
 
   /**
-   * Convert Mux playback ID to proper video URL
+   * Convert Mux playback ID to proper video URL with full quality
    */
   getMuxVideoUrl(playbackId: string): string {
     if (!playbackId) return '';
@@ -37,6 +37,7 @@ export class MediaOptimizer {
     
     // Check if it looks like a Mux playback ID (alphanumeric, ~40 chars)
     if (playbackId.length > 20 && /^[a-zA-Z0-9]+$/.test(playbackId)) {
+      // Use full quality HLS stream without compression
       return `https://stream.mux.com/${playbackId}.m3u8`;
     }
     

@@ -35,7 +35,7 @@ serve(async (req: Request) => {
 
     switch (action) {
       case 'create_upload':
-        // Create Mux upload
+        // Create Mux upload with high quality settings
         const uploadRes = await fetch('https://api.mux.com/video/v1/uploads', {
           method: 'POST',
           headers: {
@@ -43,7 +43,18 @@ serve(async (req: Request) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            new_asset_settings: { playback_policy: ['public'] },
+            new_asset_settings: { 
+              playback_policy: ['public'],
+              // High quality settings
+              mp4_support: 'standard',
+              hls_manifests: {
+                master: {
+                  name: 'master',
+                  max_resolution_tier: '1080p',
+                  max_frame_rate: 60
+                }
+              }
+            },
             cors_origin: '*',
           })
         })

@@ -131,7 +131,7 @@ class MediaCompressor {
 
   static async compressVideo(uri: string): Promise<string> {
     try {
-      console.log('🔄 Compressing video:', uri);
+      console.log('🔄 Processing video:', uri);
       
       // Check file size first
       const fileInfo = await FileSystem.getInfoAsync(uri);
@@ -139,16 +139,14 @@ class MediaCompressor {
         const fileSizeInMB = (fileInfo as any).size / (1024 * 1024);
         console.log(`📦 Original video size: ${fileSizeInMB.toFixed(2)} MB`);
         
-        // If file is larger than 70MB, we need to compress it
-        if (fileSizeInMB > 70) {
-          console.log('⚠️ Video file too large, compression needed');
-          // For now, we'll reject files over 70MB and ask user to record shorter video
-          throw new Error(`Video file is too large (${fileSizeInMB.toFixed(1)}MB). Please record a shorter video or try again.`);
+        // Allow larger files for full quality
+        if (fileSizeInMB > 200) {
+          console.log('⚠️ Video file very large, but allowing for full quality');
         }
       }
       
-      console.log('✅ Video size acceptable for upload');
-      return uri;
+      console.log('✅ Video ready for upload - maintaining full quality');
+      return uri; // Return original without compression
     } catch (error) {
       console.error('❌ Error processing video:', error);
       throw error;
