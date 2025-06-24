@@ -68,12 +68,55 @@ class MediaCompressor {
       
       console.log('📦 Original file size:', fileInfo.size ? `${(fileInfo.size / 1024 / 1024).toFixed(2)}MB` : 'unknown');
       
-      // Use a simpler approach that's more reliable
+      // First, get image dimensions to calculate proper crop
+      const imageInfo = await manipulateAsync(
+        uri,
+        [], // No operations, just get info
+        { format: SaveFormat.JPEG }
+      );
+      
+      console.log('📐 Original image dimensions:', imageInfo.width, 'x', imageInfo.height);
+      
+      // Calculate target dimensions for 9:16 aspect ratio
+      const targetAspectRatio = 9 / 16; // 9:16 aspect ratio
+      let targetWidth = 720;
+      let targetHeight = Math.round(targetWidth / targetAspectRatio); // 1280
+      
+      // Calculate crop dimensions to maintain 9:16 aspect ratio
+      const originalAspectRatio = imageInfo.width / imageInfo.height;
+      let cropWidth, cropHeight, cropX, cropY;
+      
+      if (originalAspectRatio > targetAspectRatio) {
+        // Image is wider than 9:16, crop from center
+        cropHeight = imageInfo.height;
+        cropWidth = Math.round(imageInfo.height * targetAspectRatio);
+        cropX = Math.round((imageInfo.width - cropWidth) / 2);
+        cropY = 0;
+      } else {
+        // Image is taller than 9:16, crop from center
+        cropWidth = imageInfo.width;
+        cropHeight = Math.round(imageInfo.width / targetAspectRatio);
+        cropX = 0;
+        cropY = Math.round((imageInfo.height - cropHeight) / 2);
+      }
+      
+      console.log('✂️ Crop dimensions:', { cropX, cropY, cropWidth, cropHeight });
+      
+      // Apply crop and resize to target dimensions
       const compressedImage = await manipulateAsync(
         uri,
         [
-          // Resize to target dimensions without cropping
-          { resize: { width: 720, height: 1280 } }
+          // First crop to 9:16 aspect ratio
+          { 
+            crop: {
+              originX: cropX,
+              originY: cropY,
+              width: cropWidth,
+              height: cropHeight
+            }
+          },
+          // Then resize to target dimensions
+          { resize: { width: targetWidth, height: targetHeight } }
         ],
         {
           compress: 0.8, // Good quality compression
@@ -88,7 +131,7 @@ class MediaCompressor {
       }
       
       console.log('📦 Compressed file size:', compressedFileInfo.size ? `${(compressedFileInfo.size / 1024 / 1024).toFixed(2)}MB` : 'unknown');
-      console.log('✅ Image compressed successfully');
+      console.log('✅ Image compressed and cropped to 9:16 successfully');
       return compressedImage.uri;
     } catch (error) {
       console.error('❌ Error compressing image:', error);
@@ -620,8 +663,7 @@ function PostScreen() {
       setCompressing(true);
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: 'Images' as any,
-        allowsEditing: true,
-        aspect: [9, 16], // Aspect ratio vertical pentru mobile  
+        allowsEditing: false, // Disable built-in editing to avoid aspect ratio issues
         quality: 1.0, // Use highest quality, we'll compress after
         exif: false, // Remove EXIF data to avoid orientation issues
       });
@@ -651,8 +693,7 @@ function PostScreen() {
         mediaTypes: 'Images' as any,
         allowsMultipleSelection: true,
         quality: 1, // We'll compress manually
-        aspect: [9, 16], // Aspect ratio vertical pentru mobile
-        allowsEditing: true,
+        allowsEditing: false, // Disable built-in editing to avoid aspect ratio issues
         exif: false, // Remove EXIF data to avoid orientation issues
       });
 

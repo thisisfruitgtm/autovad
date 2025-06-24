@@ -114,7 +114,7 @@ export class MediaOptimizer {
       const videoUrl = this.getMuxVideoUrl(video);
       return {
         url: videoUrl,
-        poster: this.getVideoPosterUrl(video),
+      poster: this.getVideoPosterUrl(video),
       };
     });
   }

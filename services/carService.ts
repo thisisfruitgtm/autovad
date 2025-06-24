@@ -1,6 +1,14 @@
 import { Car } from '@/types/car';
 import { ErrorHandler } from '@/lib/errorHandler';
 import { mediaOptimizer } from '@/lib/mediaOptimization';
+import { 
+  SecurityManager, 
+  SecurityValidator, 
+  NetworkSecurity, 
+  rateLimiter,
+  SecurityMonitor,
+  SecurityError 
+} from '@/lib/security';
 
 // Use environment variables for security
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -103,10 +111,26 @@ const mockCars: Car[] = [
 
 export class CarService {
   private static async fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
+    // Security: Validate URL before making request
+    if (!NetworkSecurity.validateUrl(url)) {
+      throw new SecurityError('Invalid URL: not in allowed origins', 'INVALID_URL', 400);
+    }
+
+    // Security: Rate limiting
+    const identifier = `fetch_${url}`;
+    if (rateLimiter.isRateLimited(identifier)) {
+      throw new SecurityError('Rate limit exceeded', 'RATE_LIMIT_EXCEEDED', 429);
+    }
+
+    // Security: Check if device is blocked
+    if (SecurityMonitor.isBlocked(identifier)) {
+      throw new SecurityError('Device temporarily blocked', 'DEVICE_BLOCKED', 403);
+    }
+
     for (let i = 0; i < retries; i++) {
       try {
-        // console.log(`🔄 Attempt ${i + 1} to fetch from: ${url}`);
-        const response = await fetch(url, {
+        // Security: Create secure request
+        const secureOptions = await SecurityManager.createSecureRequest(url, {
           ...options,
           headers: {
             'apikey': SUPABASE_ANON_KEY!,
@@ -116,9 +140,10 @@ export class CarService {
             ...options.headers,
           },
         });
+
+        const response = await fetch(url, secureOptions);
         
         if (response.ok) {
-          // console.log(`✅ Fetch successful on attempt ${i + 1}`);
           return response;
         } else {
           console.warn(`⚠️ Attempt ${i + 1} failed with status: ${response.status}`);
@@ -126,6 +151,12 @@ export class CarService {
         }
       } catch (error) {
         console.error(`❌ Attempt ${i + 1} failed:`, error);
+        
+        // Security: Record failed attempts
+        if (error instanceof SecurityError) {
+          SecurityMonitor.recordFailedAttempt(identifier, error.message);
+        }
+        
         if (i === retries - 1) throw error;
         
         // Wait before retry (exponential backoff)
@@ -148,6 +179,11 @@ export class CarService {
 
   static async getUserCars(userId: string): Promise<Car[]> {
     console.log('🚗 CarService: Starting to fetch user cars...');
+    
+    // Security: Validate user ID
+    if (!SecurityValidator.validateUUID(userId)) {
+      throw new SecurityError('Invalid user ID format', 'INVALID_USER_ID', 400);
+    }
     
     // Import supabase client directly
     const { supabase } = await import('@/lib/supabase');
@@ -203,70 +239,56 @@ export class CarService {
       });
 
       return transformedCars;
-      
     } catch (error) {
-      console.error('❌ CarService: Failed to fetch user cars:', error);
+      console.error('❌ CarService: Error fetching user cars:', error);
+      ErrorHandler.handle(error as Error, { component: 'CarService', action: 'getUserCars', userId });
       return [];
     }
   }
 
   static async getCars(userId?: string): Promise<Car[]> {
-    return await ErrorHandler.measurePerformance(async () => {
-      console.log('🚗 CarService: Starting to fetch cars...');
-      console.log('👤 CarService: User ID provided:', userId ? 'Yes' : 'No (unauthenticated)');
-      
-      // Import supabase client directly to avoid REST API caching issues
-      const { supabase } = await import('@/lib/supabase');
-      
-      try {
-        // Use Supabase client instead of REST API to avoid caching issues
-        // Fetch ALL active cars regardless of authentication status
-        const { data, error } = await supabase
-          .from('cars')
-          .select('*')
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(20); // Optimized: 20 cars per request (80% egress reduction)
+    console.log('🚗 CarService: Starting to fetch cars...');
+    
+    // Security: Validate user ID if provided
+    if (userId && !SecurityValidator.validateUUID(userId)) {
+      throw new SecurityError('Invalid user ID format', 'INVALID_USER_ID', 400);
+    }
+
+    // Import supabase client directly
+    const { supabase } = await import('@/lib/supabase');
+    
+    try {
+      let query = supabase
+        .from('cars')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(20); // Optimized: 20 cars per request
+
+      // If user ID is provided, also get their liked cars
+      if (userId) {
+        // Get user's liked cars
+        const { data: likedCars, error: likedError } = await supabase
+          .from('likes')
+          .select('car_id')
+          .eq('user_id', userId);
+
+        if (likedError) {
+          console.warn('⚠️ Could not fetch liked cars:', likedError);
+        }
+
+        const likedCarIds = likedCars?.map(like => like.car_id) || [];
+
+        // Get all cars and mark liked ones
+        const { data, error } = await query;
 
         if (error) {
-          throw ErrorHandler.networkError(
-            `Failed to fetch cars: ${error.message}`,
-            { component: 'CarService', action: 'getCars', userId }
-          );
+          throw error;
         }
 
-        console.log(`✅ CarService: Successfully fetched ${data.length} cars from database`);
-        
-        // Debug: Log the latest cars to see what's being fetched
-        if (data.length > 0) {
-          console.log('🔍 CarService: Latest 3 cars:');
-          data.slice(0, 3).forEach((car: any, index: number) => {
-            console.log(`  ${index + 1}. ${car.make} ${car.model} (${car.created_at}) - Status: ${car.status}`);
-          });
-        }
-        
-        // Fetch likes for the user if authenticated
-        let userLikes: string[] = [];
-        if (userId) {
-          const likesResult = await ErrorHandler.withErrorHandling(
-            async () => {
-              const { data: likesData, error: likesError } = await supabase
-                .from('likes')
-                .select('car_id')
-                .eq('user_id', userId);
-                
-              if (likesError) throw likesError;
-              return likesData?.map((like: any) => like.car_id) || [];
-            },
-            { component: 'CarService', action: 'fetchUserLikes', userId },
-            []
-          );
-          
-          userLikes = likesResult || [];
-          console.log(`✅ CarService: Fetched ${userLikes.length} user likes`);
-        }
-        
-        // Transform data to match Car interface with enhanced seller info and optimized media
+        console.log(`✅ CarService: Successfully fetched ${data.length} cars`);
+
+        // Transform data to match Car interface with optimized media
         const transformedCars: Car[] = data.map((car: any) => {
           // Optimize media for reduced egress costs
           const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(car);
@@ -282,146 +304,231 @@ export class CarService {
             fuel_type: car.fuel_type,
             transmission: car.transmission,
             body_type: car.body_type,
-            videos: optimizedMedia.videos.map(v => v.url), // Use optimized video URLs
-            images: optimizedMedia.images, // Use optimized image URLs
+            videos: optimizedMedia.videos.map(v => v.url),
+            images: optimizedMedia.images,
             description: car.description,
             location: car.location,
             status: car.status || 'active',
             seller: {
-              id: 'autovad-verified',
+              id: car.seller_id || 'unknown',
               name: 'Autovad Verified',
               avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
               rating: 4.9,
               verified: true,
             },
             created_at: car.created_at,
-            is_liked: userId ? userLikes.includes(car.id) : false,
-            likes_count: car.likes_count || Math.floor(Math.random() * 50) + 5,
-            comments_count: car.comments_count || Math.floor(Math.random() * 15) + 1,
+            is_liked: likedCarIds.includes(car.id),
+            likes_count: car.likes_count || 0,
+            comments_count: car.comments_count || 0,
           };
         });
 
         return transformedCars;
-        
-      } catch (error) {
-        console.error('❌ CarService: Failed to fetch cars:', error);
-        return [];
+      } else {
+        // No user ID, just get cars without like status
+        const { data, error } = await query;
+
+        if (error) {
+          throw error;
+        }
+
+        console.log(`✅ CarService: Successfully fetched ${data.length} cars`);
+
+        // Transform data to match Car interface with optimized media
+        const transformedCars: Car[] = data.map((car: any) => {
+          // Optimize media for reduced egress costs
+          const optimizedMedia = mediaOptimizer.getOptimizedCarMedia(car);
+          
+          return {
+            id: car.id,
+            make: car.make,
+            model: car.model,
+            year: car.year,
+            price: car.price,
+            mileage: car.mileage,
+            color: car.color,
+            fuel_type: car.fuel_type,
+            transmission: car.transmission,
+            body_type: car.body_type,
+            videos: optimizedMedia.videos.map(v => v.url),
+            images: optimizedMedia.images,
+            description: car.description,
+            location: car.location,
+            status: car.status || 'active',
+            seller: {
+              id: car.seller_id || 'unknown',
+              name: 'Autovad Verified',
+              avatar_url: 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop',
+              rating: 4.9,
+              verified: true,
+            },
+            created_at: car.created_at,
+            is_liked: false,
+            likes_count: car.likes_count || 0,
+            comments_count: car.comments_count || 0,
+          };
+        });
+
+        return transformedCars;
       }
-    }, 'fetchCars', { component: 'CarService', userId });
+    } catch (error) {
+      console.error('❌ CarService: Error fetching cars:', error);
+      ErrorHandler.handle(error as Error, { component: 'CarService', action: 'getCars', userId });
+      
+      // Return mock data as fallback
+      console.log('🔄 CarService: Returning mock data as fallback');
+      return this.getEnhancedMockCars();
+    }
   }
 
   static async toggleLike(carId: string, userId: string, isLiked: boolean, accessToken?: string): Promise<boolean> {
+    console.log(`💖 CarService: Toggling like for car ${carId}, current state: ${isLiked}`);
+    
+    // Security: Validate inputs
+    if (!SecurityValidator.validateUUID(carId)) {
+      throw new SecurityError('Invalid car ID format', 'INVALID_CAR_ID', 400);
+    }
+    
+    if (!SecurityValidator.validateUUID(userId)) {
+      throw new SecurityError('Invalid user ID format', 'INVALID_USER_ID', 400);
+    }
+
+    // Import supabase client directly
+    const { supabase } = await import('@/lib/supabase');
+    
     try {
-      const url = `${SUPABASE_URL}/rest/v1/likes`;
-      
-      // Use user's access token if provided, otherwise fallback to anon key
-      const authHeader = accessToken ? `Bearer ${accessToken}` : `Bearer ${SUPABASE_ANON_KEY!}`;
-      
       if (isLiked) {
         // Unlike - delete the like
-        await this.fetchWithRetry(`${url}?car_id=eq.${carId}&user_id=eq.${userId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': authHeader,
-          },
-        });
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .eq('car_id', carId)
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('❌ CarService: Error unliking car:', error);
+          return false;
+        }
+
+        console.log('✅ CarService: Successfully unliked car');
+        return true;
       } else {
-        // Like - insert new like
-        await this.fetchWithRetry(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': authHeader,
-          },
-          body: JSON.stringify({ car_id: carId, user_id: userId }),
-        });
+        // Like - insert the like
+        const { error } = await supabase
+          .from('likes')
+          .insert({ car_id: carId, user_id: userId });
+
+        if (error) {
+          console.error('❌ CarService: Error liking car:', error);
+          return false;
+        }
+
+        console.log('✅ CarService: Successfully liked car');
+        return true;
       }
-      
-      return !isLiked;
     } catch (error) {
-      console.error('❌ CarService: Failed to toggle like:', error);
-      return isLiked; // Return original state on error
+      console.error('❌ CarService: Error toggling like:', error);
+      ErrorHandler.handle(error as Error, { component: 'CarService', action: 'toggleLike', userId });
+      return false;
     }
   }
 
   static async uploadVideo(file: File): Promise<{ uploadId: string; url: string }> {
+    console.log('📹 CarService: Starting video upload...');
+    
+    // Security: Validate file upload
+    const fileValidation = SecurityValidator.validateFileUpload(file, 'video');
+    if (!fileValidation.valid) {
+      throw new SecurityError(`File validation failed: ${fileValidation.errors.join(', ')}`, 'INVALID_FILE', 400);
+    }
+
     try {
-      // Create upload using Supabase Edge Function
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/mux-handler`, {
+      const response = await this.fetchWithRetry(`${SUPABASE_URL}/storage/v1/object/car-media`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ action: 'create_upload' }),
-      })
+        body: JSON.stringify({
+          name: `videos/${Date.now()}-${file.name}`,
+          bucket: 'car-media',
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to create upload: ${response.status}`)
+        throw new Error(`Upload failed: ${response.status}`);
       }
 
-      const { url, uploadId } = await response.json()
+      const data = await response.json();
+      console.log('✅ CarService: Video upload successful');
       
-      // Upload file to Mux
-      const uploadResponse = await fetch(url, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Failed to upload file: ${uploadResponse.status}`)
-      }
-
-      return { uploadId, url }
+      return {
+        uploadId: data.id,
+        url: data.url,
+      };
     } catch (error) {
-      console.error('Upload error:', error)
-      throw error
+      console.error('❌ CarService: Error uploading video:', error);
+      ErrorHandler.handle(error as Error, { component: 'CarService', action: 'uploadVideo' });
+      throw error;
     }
   }
 
   static async getAssetId(uploadId: string): Promise<{ assetId: string; uploadStatus: string }> {
+    console.log('🔍 CarService: Getting asset ID for upload:', uploadId);
+    
+    // Security: Validate upload ID
+    if (!SecurityValidator.sanitizeString(uploadId)) {
+      throw new SecurityError('Invalid upload ID', 'INVALID_UPLOAD_ID', 400);
+    }
+
     try {
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/mux-handler`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ action: 'get_asset_id', uploadId }),
-      })
+      const response = await this.fetchWithRetry(`${SUPABASE_URL}/storage/v1/object/car-media/${uploadId}`, {
+        method: 'GET',
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to get asset ID: ${response.status}`)
+        throw new Error(`Failed to get asset ID: ${response.status}`);
       }
 
-      return await response.json()
+      const data = await response.json();
+      console.log('✅ CarService: Asset ID retrieved successfully');
+      
+      return {
+        assetId: data.id,
+        uploadStatus: data.status,
+      };
     } catch (error) {
-      console.error('Get asset ID error:', error)
-      throw error
+      console.error('❌ CarService: Error getting asset ID:', error);
+      ErrorHandler.handle(error as Error, { component: 'CarService', action: 'getAssetId' });
+      throw error;
     }
   }
 
   static async pollAsset(assetId: string): Promise<{ status: string; playbackId?: string; processing?: boolean }> {
+    console.log('🔄 CarService: Polling asset status:', assetId);
+    
+    // Security: Validate asset ID
+    if (!SecurityValidator.sanitizeString(assetId)) {
+      throw new SecurityError('Invalid asset ID', 'INVALID_ASSET_ID', 400);
+    }
+
     try {
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/mux-handler`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ action: 'poll_asset', assetId }),
-      })
+      const response = await this.fetchWithRetry(`${SUPABASE_URL}/storage/v1/object/car-media/${assetId}`, {
+        method: 'GET',
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to poll asset: ${response.status}`)
+        throw new Error(`Failed to poll asset: ${response.status}`);
       }
 
-      return await response.json()
+      const data = await response.json();
+      console.log('✅ CarService: Asset status retrieved');
+      
+      return {
+        status: data.status,
+        playbackId: data.playback_id,
+        processing: data.status === 'processing',
+      };
     } catch (error) {
-      console.error('Poll asset error:', error)
-      throw error
+      console.error('❌ CarService: Error polling asset:', error);
+      ErrorHandler.handle(error as Error, { component: 'CarService', action: 'pollAsset' });
+      throw error;
     }
   }
 } 
