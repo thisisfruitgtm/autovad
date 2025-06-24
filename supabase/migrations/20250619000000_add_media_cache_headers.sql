@@ -20,19 +20,19 @@ SET
 WHERE id = 'car-media';
 
 -- Add RLS policy for optimized media access
-CREATE POLICY "Optimized media access with caching" ON storage.objects
-FOR SELECT 
-TO public
-USING (
-  bucket_id = 'car-media' 
-  AND (
-    -- Allow access to optimized images
-    (name LIKE '%.jpg' OR name LIKE '%.png' OR name LIKE '%.webp')
-    OR 
-    -- Allow access to videos with posters
-    (name LIKE '%.mp4' OR name LIKE '%.mov' OR name LIKE '%.avi')
-  )
-);
+-- CREATE POLICY "Optimized media access with caching" ON storage.objects
+-- FOR SELECT 
+-- TO public
+-- USING (
+--   bucket_id = 'car-media' 
+--   AND (
+--     -- Allow access to optimized images
+--     (name LIKE '%.jpg' OR name LIKE '%.png' OR name LIKE '%.webp')
+--     OR 
+--     -- Allow access to videos with posters
+--     (name LIKE '%.mp4' OR name LIKE '%.mov' OR name LIKE '%.avi')
+--   )
+-- );
 
 -- Create function to generate optimized media URLs
 CREATE OR REPLACE FUNCTION get_optimized_media_url(

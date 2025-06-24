@@ -342,4 +342,86 @@ export class CarService {
       return isLiked; // Return original state on error
     }
   }
+
+  static async uploadVideo(file: File): Promise<{ uploadId: string; url: string }> {
+    try {
+      // Create upload using Supabase Edge Function
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/mux-handler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ action: 'create_upload' }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to create upload: ${response.status}`)
+      }
+
+      const { url, uploadId } = await response.json()
+      
+      // Upload file to Mux
+      const uploadResponse = await fetch(url, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Failed to upload file: ${uploadResponse.status}`)
+      }
+
+      return { uploadId, url }
+    } catch (error) {
+      console.error('Upload error:', error)
+      throw error
+    }
+  }
+
+  static async getAssetId(uploadId: string): Promise<{ assetId: string; uploadStatus: string }> {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/mux-handler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ action: 'get_asset_id', uploadId }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to get asset ID: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Get asset ID error:', error)
+      throw error
+    }
+  }
+
+  static async pollAsset(assetId: string): Promise<{ status: string; playbackId?: string; processing?: boolean }> {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/mux-handler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ action: 'poll_asset', assetId }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to poll asset: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Poll asset error:', error)
+      throw error
+    }
+  }
 } 

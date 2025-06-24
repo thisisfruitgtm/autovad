@@ -25,6 +25,25 @@ export class MediaOptimizer {
   }
 
   /**
+   * Convert Mux playback ID to proper video URL
+   */
+  getMuxVideoUrl(playbackId: string): string {
+    if (!playbackId) return '';
+    
+    // Check if it's already a full URL
+    if (playbackId.startsWith('http')) {
+      return playbackId;
+    }
+    
+    // Check if it looks like a Mux playback ID (alphanumeric, ~40 chars)
+    if (playbackId.length > 20 && /^[a-zA-Z0-9]+$/.test(playbackId)) {
+      return `https://stream.mux.com/${playbackId}.m3u8`;
+    }
+    
+    return playbackId;
+  }
+
+  /**
    * Generate optimized image URL with transformations
    * Reduces bandwidth by 80% through thumbnail generation
    */
@@ -46,6 +65,11 @@ export class MediaOptimizer {
    */
   getVideoPosterUrl(videoUrl: string): string {
     if (!videoUrl) return '';
+    
+    // If it's a Mux playback ID, generate thumbnail URL
+    if (videoUrl.length > 20 && /^[a-zA-Z0-9]+$/.test(videoUrl) && !videoUrl.startsWith('http')) {
+      return `https://image.mux.com/${videoUrl}/thumbnail.jpg`;
+    }
     
     // Add poster parameter to generate first frame
     return `${videoUrl}?poster=1&width=400&quality=80`;
@@ -85,10 +109,13 @@ export class MediaOptimizer {
   optimizeVideoArray(videos: string[]): { url: string; poster: string }[] {
     if (!videos || videos.length === 0) return [];
 
-    return videos.map(video => ({
-      url: video,
-      poster: this.getVideoPosterUrl(video),
-    }));
+    return videos.map(video => {
+      const videoUrl = this.getMuxVideoUrl(video);
+      return {
+        url: videoUrl,
+        poster: this.getVideoPosterUrl(video),
+      };
+    });
   }
 
   /**

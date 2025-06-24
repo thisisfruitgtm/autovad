@@ -11,6 +11,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { ChevronLeft, ChevronRight, Play, Pause, Volume2, VolumeX } from 'lucide-react-native';
 import { mediaOptimizer } from '@/lib/mediaOptimization';
 import { useLazyMedia, useLazyVideo } from '@/hooks/useLazyMedia';
+import { useEvent } from 'expo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -66,16 +67,20 @@ export function VideoCarousel({ videos, images = [], isVisible = true, autoPlay 
 
   // Handle visibility changes and current video state
   useEffect(() => {
+    if (isCurrentVideo && currentVideoUrl) {
+      console.log('[VideoCarousel] Attempting to load video:', currentVideoUrl);
+    }
     if (player && isCurrentVideo && currentVideoUrl) {
       try {
         player.muted = isMuted;
         if (isPlaying && isVisible && autoPlay) {
           player.play();
+          console.log('[VideoCarousel] Playing video:', currentVideoUrl);
         } else {
           player.pause();
         }
       } catch (error) {
-        console.log('Error controlling video:', error);
+        console.log('[VideoCarousel] Error controlling video:', error);
       }
     }
 
@@ -106,6 +111,17 @@ export function VideoCarousel({ videos, images = [], isVisible = true, autoPlay 
       }
     }
   }, [isMuted, player, isCurrentVideo]);
+
+  // Log video status and errors
+  const statusPayload = useEvent(player, 'statusChange', { status: player?.status });
+  useEffect(() => {
+    if (isCurrentVideo && currentVideoUrl && statusPayload) {
+      console.log('[VideoCarousel] Video status:', statusPayload.status, 'for', currentVideoUrl);
+      if (statusPayload.error) {
+        console.log('[VideoCarousel] Video error:', statusPayload.error, 'for', currentVideoUrl);
+      }
+    }
+  }, [isCurrentVideo, currentVideoUrl, statusPayload]);
 
   const togglePlayPause = () => {
     if (!player || !isCurrentVideo) return;
@@ -198,7 +214,6 @@ export function VideoCarousel({ videos, images = [], isVisible = true, autoPlay 
             allowsPictureInPicture={false}
             showsTimecodes={false}
             requiresLinearPlayback={false}
-            nativeControls={false}
           />
         ) : (
           <>

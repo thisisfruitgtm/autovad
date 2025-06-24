@@ -400,15 +400,23 @@ const uploadVideoToMux = async (uri: string): Promise<{ playbackId: string; asse
   try {
     console.log('🔄 Starting Mux upload process...');
     
-    // 1. Cere URL de upload de la backend
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://autovad.vercel.app';
-    console.log('📡 Requesting upload URL from:', `${apiUrl}/api/mux-upload`);
+    // 1. Create upload using Supabase Edge Function
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
     
-    const res = await fetch(`${apiUrl}/api/mux-upload`, { 
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase configuration missing');
+    }
+    
+    console.log('📡 Requesting upload URL from Supabase Edge Function');
+    
+    const res = await fetch(`${supabaseUrl}/functions/v1/mux-handler`, { 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({ action: 'create_upload' })
     });
     
     if (!res.ok) {
@@ -459,22 +467,79 @@ const uploadVideoToMux = async (uri: string): Promise<{ playbackId: string; asse
     
     console.log('✅ Video uploaded to Mux successfully');
 
-    // 3. Pentru demo, returnăm un playbackId și assetId mock
-    // În producție, acestea vor fi populate prin webhook-ul Mux
-    console.log('⚠️ Using mock playbackId for demo - in production this comes from Mux webhook');
+    // 3. Get asset ID from upload and wait for processing
+    console.log('⏳ Getting asset ID and waiting for Mux to process video...');
     
-    // Simulează un delay pentru procesare
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Get asset ID from the upload using Supabase function
+    let assetId = null;
+    let attempts = 0;
+    const maxAttempts = 30; // 30 seconds max wait for asset ID
     
-    // Returnăm valori mock pentru demo
-    const mockPlaybackId = `mock-${Date.now()}`;
-    const mockAssetId = `mock-asset-${Date.now()}`;
+    while (!assetId && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      attempts++;
+      
+      try {
+        const assetRes = await fetch(`${supabaseUrl}/functions/v1/mux-handler`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({ action: 'get_asset_id', uploadId })
+        });
+        
+        if (assetRes.ok) {
+          const response = await assetRes.json();
+          console.log('📊 Asset response:', response);
+          
+          if (response.assetId) {
+            assetId = response.assetId;
+            console.log('✅ Got asset ID:', assetId);
+            break;
+          }
+        }
+      } catch (error) {
+        console.log('⏳ Still waiting for asset ID... (attempt', attempts, '/', maxAttempts, ')');
+      }
+    }
     
-    console.log('✅ Mux upload process completed with mock IDs');
-    return { 
-      playbackId: mockPlaybackId, 
-      assetId: mockAssetId 
-    };
+    if (!assetId) {
+      throw new Error('Timeout waiting for asset ID');
+    }
+    
+    // 4. Poll for playback ID using Supabase function
+    attempts = 0;
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      attempts++;
+      
+      // Poll Mux via Supabase Edge Function
+      try {
+        const pollRes = await fetch(`${supabaseUrl}/functions/v1/mux-handler`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({ action: 'poll_asset', assetId })
+        });
+        
+        if (pollRes.ok) {
+          const response = await pollRes.json();
+          console.log('📊 Mux poll response:', response);
+          
+          if (response.status === 'ready' && response.playbackId) {
+            console.log('✅ Real Mux playback ID received:', response.playbackId);
+            return { playbackId: response.playbackId, assetId: response.assetId };
+          }
+        }
+      } catch (error) {
+        console.log('⏳ Still waiting for Mux processing... (attempt', attempts, '/', maxAttempts, ')');
+      }
+    }
+    
+    throw new Error('Timeout waiting for Mux to process video');
     
   } catch (error) {
     console.error('❌ Error in uploadVideoToMux:', error);
